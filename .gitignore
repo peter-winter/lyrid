@@ -1,0 +1,27 @@
+# Build directories and artifacts
+build/
+CMakeFiles/
+*.cmake
+CMakeCache.txt
+Makefile
+install_manifest.txt
+
+# Bison/Flex generated files
+*.tab.c
+*.tab.h
+lex.yy.c
+*.yy.c
+*.output
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Other temporaries
+*.o
+*.a
+*.exe
+*.log
+*.tmp
