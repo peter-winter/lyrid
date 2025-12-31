@@ -6,6 +6,7 @@ FetchContent_Declare(
     unity
     GIT_REPOSITORY https://github.com/ThrowTheSwitch/Unity.git
     GIT_TAG        v2.6.1  # Latest release as of December 31, 2025
+    GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(unity)
 
