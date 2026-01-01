@@ -34,6 +34,7 @@ target_include_directories(lyrid_parser
 
 add_executable(lyrid_parser_tests
     tests/test_parser.cpp
+    tests/test_semantics.cpp
 )
 
 target_include_directories(lyrid_parser_tests

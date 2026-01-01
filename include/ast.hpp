@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <memory>
 
 namespace lyrid
 {
@@ -26,10 +27,20 @@ struct f_call
     std::vector<expr_wrapper> args_;
 };
 
+struct index_access
+{
+    std::unique_ptr<expr_wrapper> base_;
+    std::unique_ptr<expr_wrapper> index_;
+};
+
+struct array_construction
+{
+    std::vector<expr_wrapper> elements_;
+};
+
 struct int_scalar
 {
     using value_type = int64_t;
-    using vector_type = std::vector<value_type>;
     value_type value_;
 };
 
@@ -39,42 +50,13 @@ struct float_scalar
     value_type value_;
 };
 
-
-struct int_array
-{
-    using vector_type = std::vector<int_scalar::value_type>;
-    vector_type values_;
-};
-
-struct float_array
-{
-    using vector_type = std::vector<float_scalar::value_type>;
-    vector_type values_;
-};
-
-template<typename T>
-struct to_array_t
-{};
-
-template<>
-struct to_array_t<int_scalar>
-{
-    using type = int_array;
-};
-
-template<>
-struct to_array_t<float_scalar>
-{
-    using type = float_array;
-};
-
 using expr = std::variant<
     int_scalar,
     float_scalar,
     id,
     f_call,
-    int_array,
-    float_array
+    index_access,
+    array_construction
 >;
 
 struct expr_wrapper
@@ -86,7 +68,7 @@ struct declaration
 {
     type type_;
     id name_;
-    expr_wrapper value_;
+    expr value_;
     size_t line_number_;
 };
 

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "ast.hpp"
-#include <optional>
 #include <string>
 #include <vector>
+#include <optional>
 
 namespace lyrid
 {
@@ -13,9 +13,11 @@ class parser
 public:
     parser() = default;
 
-    std::optional<program> parse(const std::string& source);
+    void parse(const std::string& source);
 
     const std::vector<std::string>& get_errors() const;
+
+    const program& get_program() const;
 
 private:
     std::string input_;
@@ -42,9 +44,7 @@ private:
 
     std::optional<std::vector<expr_wrapper>> parse_arg_list();
 
-    std::optional<expr> parse_array_literal();
-
-    std::optional<expr> parse_function_call();
+    std::optional<expr> parse_array_construction();
 
     std::optional<expr> parse_primary();
 

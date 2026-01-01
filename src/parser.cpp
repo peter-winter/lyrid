@@ -4,6 +4,7 @@
 #include <cctype>
 #include <limits>
 #include <stdexcept>
+#include <memory>
 
 namespace lyrid
 {
@@ -12,8 +13,13 @@ const std::vector<std::string>& parser::get_errors() const
 {
     return errors_;
 }
-    
-std::optional<program> parser::parse(const std::string& source)
+
+const program& parser::get_program() const
+{
+    return prog_;
+}
+
+void parser::parse(const std::string& source)
 {
     input_ = source;
     pos_ = 0;
@@ -55,11 +61,7 @@ std::optional<program> parser::parse(const std::string& source)
     if (!errors_.empty())
     {
         prog_.declarations_.clear();
-
-        return std::nullopt;
     }
-
-    return prog_;
 }
 
 char parser::peek() const
@@ -309,7 +311,7 @@ std::optional<std::vector<expr_wrapper>> parser::parse_arg_list()
             return {};
         }
 
-        args.emplace_back(expr_wrapper{*e});
+        args.emplace_back(expr_wrapper{std::move(*e)});
     }
     while (match(','));
 
@@ -318,7 +320,7 @@ std::optional<std::vector<expr_wrapper>> parser::parse_arg_list()
     return args;
 }
 
-std::optional<expr> parser::parse_array_literal()
+std::optional<expr> parser::parse_array_construction()
 {
     if (!match('['))
     {
@@ -327,61 +329,66 @@ std::optional<expr> parser::parse_array_literal()
 
     skip_horizontal_whitespace();
 
-    if (match(']'))
-    {
-        error("Empty array literals are not allowed");
+    std::vector<expr_wrapper> elements;
 
-        return {};
-    }
-
-    auto first = parse_number();
+    auto first = parse_expr();
 
     if (!first)
     {
-        error("Array literals must contain only numeric constants");
+        error("Array construction cannot be empty; expected at least one expression");
+
+        // Recovery: skip to ']'
+        while (peek() != ']' && peek() != '\0' && peek() != '\n')
+        {
+            advance();
+        }
+
+        if (match(']'))
+        {
+            return expr(array_construction{std::move(elements)});
+        }
 
         return {};
     }
 
-    auto parse_scalar_array = [&]<typename Sc>(Sc sc) -> std::optional<expr>
+    elements.emplace_back(expr_wrapper{std::move(*first)});
+
+    while (match(','))
     {
-        using Ar = typename to_array_t<Sc>::type;
-        typename Ar::vector_type values { std::get<Sc>(*first).value_ };
+        auto elem = parse_expr();
 
-        while (match(','))
+        if (!elem)
         {
-            auto val = parse_number();
+            error("Expected expression after ',' in array construction");
 
-            if (!val || !std::holds_alternative<Sc>(*val))
-            {
-                error("Type mismatch in array literal");
-
-                return {};
-            }
-
-            values.push_back(std::get<Sc>(*val).value_);
+            return {};
         }
 
-        expect(']', "Expected ']' to close array literal");
+        elements.emplace_back(expr_wrapper{std::move(*elem)});
+    }
 
-        return expr(Ar{std::move(values)});
-    };
-    
-    return std::visit(
-        overloaded
-        {
-            [&](int_scalar sc) -> std::optional<expr> { return parse_scalar_array(sc); },
-            [&](float_scalar sc) -> std::optional<expr> { return parse_scalar_array(sc); },
-            [](auto) -> std::optional<expr> { return {}; }
-        },
-        *first
-    );
+    expect(']', "Expected ']' to close array construction");
+
+    return expr(array_construction{std::move(elements)});
 }
 
-std::optional<expr> parser::parse_function_call()
+std::optional<expr> parser::parse_primary()
 {
-    size_t saved_pos = pos_;
-    size_t saved_line = line_;
+    skip_horizontal_whitespace();
+
+    auto num = parse_number();
+
+    if (num)
+    {
+        return num;
+    }
+
+    auto arr = parse_array_construction();
+
+    if (arr)
+    {
+        return arr;
+    }
 
     std::string name = parse_identifier();
 
@@ -390,53 +397,52 @@ std::optional<expr> parser::parse_function_call()
         return {};
     }
 
-    if (!match('('))
+    if (match('('))
     {
-        pos_ = saved_pos;
-        line_ = saved_line;
+        auto args_opt = parse_arg_list();
 
-        return {};
+        if (!args_opt)
+        {
+            return {};
+        }
+
+        return expr(f_call{std::move(name), std::move(*args_opt)});
     }
 
-    auto args = parse_arg_list();
-
-    if (!args)
-    {
-        return {};
-    }
-
-    return expr(f_call{std::move(name), std::move(*args)});
-}
-
-std::optional<expr> parser::parse_primary()
-{
-    auto num = parse_number();
-
-    if (num)
-    {
-        return num;
-    }
-
-    std::string name = parse_identifier();
-
-    if (!name.empty())
-    {
-        return expr(id{std::move(name)});
-    }
-
-    return parse_array_literal();
+    return expr(id{std::move(name)});
 }
 
 std::optional<expr> parser::parse_expr()
 {
-    auto call = parse_function_call();
+    auto base = parse_primary();
 
-    if (call)
+    if (!base)
     {
-        return call;
+        return {};
     }
 
-    return parse_primary();
+    expr current = std::move(*base);
+
+    if (match('['))
+    {
+        auto index = parse_expr();
+
+        if (!index)
+        {
+            error("Expected index expression");
+
+            return {};
+        }
+
+        expect(']', "Expected ']' after index expression");
+
+        auto base_wrapper = std::make_unique<expr_wrapper>(expr_wrapper{std::move(current)});
+        auto index_wrapper = std::make_unique<expr_wrapper>(expr_wrapper{std::move(*index)});
+
+        return expr(index_access{std::move(base_wrapper), std::move(index_wrapper)});
+    }
+
+    return current;
 }
 
 bool parser::parse_declaration()
@@ -482,7 +488,7 @@ bool parser::parse_declaration()
         return false;
     }
 
-    prog_.declarations_.emplace_back(declaration{*decl_type, std::move(name), expr_wrapper{*value}, decl_line});
+    prog_.declarations_.emplace_back(declaration{*decl_type, std::move(name), std::move(*value), decl_line});
 
     return true;
 }
