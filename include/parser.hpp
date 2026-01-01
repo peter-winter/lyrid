@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ast.hpp"
+#include "type.hpp"
+
 #include <string>
 #include <vector>
 #include <optional>
@@ -17,13 +19,13 @@ public:
 
     const std::vector<std::string>& get_errors() const;
 
-    const program& get_program() const;
+    const ast::program& get_program() const;
 
 private:
     std::string input_;
     size_t pos_ = 0;
     size_t line_ = 1;
-    program prog_;
+    ast::program prog_;
     std::vector<std::string> errors_;
 
     char peek() const;
@@ -38,21 +40,21 @@ private:
 
     std::string parse_identifier();
 
-    std::optional<expr> parse_number();
+    std::optional<ast::expr> parse_number();
 
     std::optional<type> parse_type();
 
-    std::optional<std::vector<expr_wrapper>> parse_arg_list();
+    std::optional<std::vector<ast::expr_wrapper>> parse_arg_list();
 
-    std::optional<array_construction> parse_literal_array_construction();
+    std::optional<ast::array_construction> parse_literal_array_construction();
     
-    std::optional<comprehension> parse_array_comprehension();
+    std::optional<ast::comprehension> parse_array_comprehension();
     
-    std::optional<expr> parse_array_construction();
+    std::optional<ast::expr> parse_array_construction();
 
-    std::optional<expr> parse_primary();
+    std::optional<ast::expr> parse_primary();
 
-    std::optional<expr> parse_expr();
+    std::optional<ast::expr> parse_expr();
 
     bool parse_declaration();
 };

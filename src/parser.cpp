@@ -9,6 +9,8 @@
 namespace lyrid
 {
 
+using namespace ast;
+
 const std::vector<std::string>& parser::get_errors() const
 {
     return errors_;

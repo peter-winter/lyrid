@@ -6,6 +6,9 @@
 namespace lyrid
 {
 
+using namespace ast;
+using namespace lyrid::ast;
+
 void semantic_analyzer::register_function_prototype(
     const std::string& name,
     std::vector<type> arg_types,

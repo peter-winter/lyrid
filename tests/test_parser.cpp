@@ -8,6 +8,7 @@ using Catch::Matchers::ContainsSubstring;
 #include "semantic_analyzer.hpp"
 
 using namespace lyrid;
+using namespace lyrid::ast;
 
 TEST_CASE("Empty input is valid", "[valid]")
 {

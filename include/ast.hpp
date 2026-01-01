@@ -6,16 +6,13 @@
 #include <cstdint>
 #include <memory>
 
+#include "type.hpp"
+
 namespace lyrid
 {
     
-enum class type
+namespace ast
 {
-    int_scalar,
-    float_scalar,
-    int_array,
-    float_array
-};
 
 using id = std::string;
 
@@ -89,5 +86,7 @@ struct program
 
     const std::vector<std::string>& get_errors() const { return errors_; }
 };
+
+}
 
 }

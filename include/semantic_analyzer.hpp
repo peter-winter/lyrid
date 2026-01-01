@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ast.hpp"
+#include "type.hpp"
 #include "utility.hpp"
 
 #include <map>
@@ -27,7 +28,7 @@ public:
         std::vector<std::string> arg_names,
         type return_type);
 
-    void analyze(const program& prog);
+    void analyze(const ast::program& prog);
 
     bool is_valid() const { return errors_.empty(); }
 
@@ -39,7 +40,7 @@ private:
     std::string type_to_string(type t) const;
 
     std::optional<type> infer_expression_type(
-        const expr& e,
+        const ast::expr& e,
         const std::map<std::string, type>& symbols,
         size_t decl_line);
 
