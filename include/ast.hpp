@@ -38,6 +38,13 @@ struct array_construction
     std::vector<expr_wrapper> elements_;
 };
 
+struct comprehension
+{
+    std::vector<std::string> variables_;
+    std::vector<expr_wrapper> in_exprs_;
+    std::unique_ptr<expr_wrapper> do_expr_;
+};
+
 struct int_scalar
 {
     using value_type = int64_t;
@@ -56,7 +63,8 @@ using expr = std::variant<
     id,
     f_call,
     index_access,
-    array_construction
+    array_construction,
+    comprehension
 >;
 
 struct expr_wrapper

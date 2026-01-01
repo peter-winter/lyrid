@@ -44,6 +44,10 @@ private:
 
     std::optional<std::vector<expr_wrapper>> parse_arg_list();
 
+    std::optional<array_construction> parse_literal_array_construction();
+    
+    std::optional<comprehension> parse_array_comprehension();
+    
     std::optional<expr> parse_array_construction();
 
     std::optional<expr> parse_primary();

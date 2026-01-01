@@ -320,6 +320,170 @@ std::optional<std::vector<expr_wrapper>> parser::parse_arg_list()
     return args;
 }
 
+std::optional<array_construction> parser::parse_literal_array_construction()
+{
+    std::vector<expr_wrapper> elements;
+
+    auto first_opt = parse_expr();
+    if (!first_opt)
+    {
+        error("Expected expression in array literal");
+        return {};
+    }
+    elements.emplace_back(expr_wrapper{std::move(*first_opt)});
+
+    while (true)
+    {
+        skip_horizontal_whitespace();
+        if (!match(','))
+        {
+            break;
+        }
+        skip_horizontal_whitespace();
+        auto elem_opt = parse_expr();
+        if (!elem_opt)
+        {
+            error("Expected expression after ',' in array literal");
+            return {};
+        }
+        elements.emplace_back(expr_wrapper{std::move(*elem_opt)});
+    }
+
+    return array_construction{std::move(elements)};
+}
+
+std::optional<comprehension> parser::parse_array_comprehension()
+{
+    // Expect opening '|' for variables
+    skip_horizontal_whitespace();
+    if (!match('|'))
+    {
+        error("Expected '|' to start variable list in array comprehension");
+        return {};
+    }
+
+    // Parse variables (comma-separated identifiers, at least one)
+    std::vector<std::string> variables;
+    skip_horizontal_whitespace();
+
+    // Check for empty variable list early
+    if (match('|'))
+    {
+        error("Array comprehension must have at least one variable");
+        return {};
+    }
+
+    do
+    {
+        std::string var = parse_identifier();
+        if (var.empty())
+        {
+            error("Expected identifier in variable list");
+            return {};
+        }
+        variables.push_back(std::move(var));
+
+        skip_horizontal_whitespace();
+    } while (match(','));
+
+    // Expect closing '|' for variables
+    if (!match('|'))
+    {
+        error("Expected '|' to close variable list in array comprehension");
+        return {};
+    }
+
+    // Expect 'in' keyword
+    skip_horizontal_whitespace();
+    std::string in_kw = parse_identifier();
+    if (in_kw != "in")
+    {
+        error("Expected 'in' after variable list in array comprehension");
+        return {};
+    }
+
+    // Expect opening '|' for sources
+    skip_horizontal_whitespace();
+    if (!match('|'))
+    {
+        error("Expected '|' to start source expression list in array comprehension");
+        return {};
+    }
+
+    // Parse source expressions (comma-separated, count must match variables)
+    std::vector<expr_wrapper> in_exprs;
+    skip_horizontal_whitespace();
+
+    // Require at least one source expression (mismatch will be caught below anyway)
+    auto src_opt = parse_expr();
+    if (!src_opt)
+    {
+        error("Expected source expression in 'in' clause");
+        return {};
+    }
+    in_exprs.emplace_back(expr_wrapper{std::move(*src_opt)});
+
+    while (true)
+    {
+        skip_horizontal_whitespace();
+        if (!match(','))
+        {
+            break;
+        }
+        skip_horizontal_whitespace();
+        src_opt = parse_expr();
+        if (!src_opt)
+        {
+            error("Expected source expression after ',' in 'in' clause");
+            return {};
+        }
+        in_exprs.emplace_back(expr_wrapper{std::move(*src_opt)});
+    }
+
+    // Check count mismatch (syntax error as originally required)
+    if (in_exprs.size() != variables.size())
+    {
+        error("Number of variables (" + std::to_string(variables.size()) +
+              ") and source expressions (" + std::to_string(in_exprs.size()) +
+              ") must match in array comprehension");
+        return {};
+    }
+
+    // Expect closing '|' for sources
+    skip_horizontal_whitespace();
+    if (!match('|'))
+    {
+        error("Expected '|' to close source expression list in array comprehension");
+        return {};
+    }
+
+    // Expect 'do' keyword
+    skip_horizontal_whitespace();
+    std::string do_kw = parse_identifier();
+    if (do_kw != "do")
+    {
+        error("Expected 'do' after source list in array comprehension");
+        return {};
+    }
+
+    // Parse body expression
+    skip_horizontal_whitespace();
+    auto body_opt = parse_expr();
+    if (!body_opt)
+    {
+        error("Expected expression after 'do' in array comprehension");
+        return {};
+    }
+
+    auto do_wrapper = std::make_unique<expr_wrapper>(expr_wrapper{std::move(*body_opt)});
+
+    return comprehension{
+        std::move(variables),
+        std::move(in_exprs),
+        std::move(do_wrapper)
+    };
+}
+
 std::optional<expr> parser::parse_array_construction()
 {
     if (!match('['))
@@ -329,47 +493,64 @@ std::optional<expr> parser::parse_array_construction()
 
     skip_horizontal_whitespace();
 
-    std::vector<expr_wrapper> elements;
-
-    auto first = parse_expr();
-
-    if (!first)
+    // Disallow empty array
+    if (match(']'))
     {
-        error("Array construction cannot be empty; expected at least one expression");
-
-        // Recovery: skip to ']'
-        while (peek() != ']' && peek() != '\0' && peek() != '\n')
-        {
-            advance();
-        }
-
-        if (match(']'))
-        {
-            return expr(array_construction{std::move(elements)});
-        }
-
+        error("Array construction cannot be empty; expected elements or a comprehension");
         return {};
     }
 
-    elements.emplace_back(expr_wrapper{std::move(*first)});
+    // Distinguish comprehension (starts with '|') from literal array
+    size_t save_pos = pos_;
+    size_t save_line = line_;
+    skip_horizontal_whitespace();
 
-    while (match(','))
+    if (match('|'))
     {
-        auto elem = parse_expr();
+        // Comprehension path
+        pos_ = save_pos;   // rollback the matched '|'
+        line_ = save_line;
 
-        if (!elem)
+        auto comp_opt = parse_array_comprehension();
+        if (!comp_opt)
         {
-            error("Expected expression after ',' in array construction");
-
+            // Recovery: skip to ']'
+            while (peek() != ']' && peek() != '\0' && peek() != '\n')
+            {
+                advance();
+            }
+            match(']');
             return {};
         }
 
-        elements.emplace_back(expr_wrapper{std::move(*elem)});
+        skip_horizontal_whitespace();
+        expect(']', "Expected ']' to close array comprehension");
+
+        return expr(std::move(*comp_opt));
     }
+    else
+    {
+        // Literal array path
+        pos_ = save_pos;
+        line_ = save_line;
 
-    expect(']', "Expected ']' to close array construction");
+        auto lit_opt = parse_literal_array_construction();
+        if (!lit_opt)
+        {
+            // Recovery
+            while (peek() != ']' && peek() != '\0' && peek() != '\n')
+            {
+                advance();
+            }
+            match(']');
+            return {};
+        }
 
-    return expr(array_construction{std::move(elements)});
+        skip_horizontal_whitespace();
+        expect(']', "Expected ']' to close array literal");
+
+        return expr(std::move(*lit_opt));
+    }
 }
 
 std::optional<expr> parser::parse_primary()
@@ -377,21 +558,18 @@ std::optional<expr> parser::parse_primary()
     skip_horizontal_whitespace();
 
     auto num = parse_number();
-
     if (num)
     {
         return num;
     }
 
     auto arr = parse_array_construction();
-
     if (arr)
     {
         return arr;
     }
 
     std::string name = parse_identifier();
-
     if (name.empty())
     {
         return {};
@@ -400,7 +578,6 @@ std::optional<expr> parser::parse_primary()
     if (match('('))
     {
         auto args_opt = parse_arg_list();
-
         if (!args_opt)
         {
             return {};

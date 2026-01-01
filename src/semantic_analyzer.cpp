@@ -1,6 +1,7 @@
 #include "semantic_analyzer.hpp"
 
 #include <stdexcept>
+#include <set>
 
 namespace lyrid
 {
@@ -93,8 +94,8 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
                     errors_.emplace_back(
                         "Line " + std::to_string(decl_line) + ": Type mismatch for " + arg_name + " in call to '" + call.name_ +
-                        "': expected " + type_to_string(proto.arg_types[i]) +
-                        " but got " + type_to_string(*arg_type));
+                        "': expected '" + type_to_string(proto.arg_types[i]) +
+                        "' but got '" + type_to_string(*arg_type) + "'");
                 }
             }
 
@@ -192,7 +193,80 @@ std::optional<type> semantic_analyzer::infer_expression_type(
             }
 
             return (*elem_type == type::int_scalar) ? type::int_array : type::float_array;
-        }
+        },
+        [&](const comprehension& fc) -> std::optional<type>
+        {
+            size_t n = fc.variables_.size();
+
+            if (n == 0 || n != fc.in_exprs_.size())
+            {
+                errors_.emplace_back("Line " + std::to_string(decl_line) + ": Invalid array comprehension (mismatched variables/sources)");
+                return {};
+            }
+
+            // Infer element types of sources
+            std::vector<type> elem_types;
+            for (const auto& src : fc.in_exprs_)
+            {
+                std::optional<type> src_type = infer_expression_type(src.wrapped_, symbols, decl_line);
+                if (!src_type) return {};
+
+                type elem_t;
+                if (*src_type == type::int_array)
+                {
+                    elem_t = type::int_scalar;
+                }
+                else if (*src_type == type::float_array)
+                {
+                    elem_t = type::float_scalar;
+                }
+                else
+                {
+                    errors_.emplace_back("Line " + std::to_string(decl_line) +
+                                         ": Source in array comprehension must be an array type, got '" +
+                                         type_to_string(*src_type) + "'");
+                    return {};
+                }
+                elem_types.push_back(elem_t);
+            }
+
+            // Check variable uniqueness (semantic phase as requested)
+            std::set<std::string> seen;
+            for (const std::string& v : fc.variables_)
+            {
+                if (!seen.insert(v).second)
+                {
+                    errors_.emplace_back("Line " + std::to_string(decl_line) +
+                                         ": Duplicate variable '" + v + "' in array comprehension");
+                    return {};
+                }
+            }
+
+            // Temporary scope: local symbols (shadows outer symbols)
+            std::map<std::string, type> local_symbols;
+            for (size_t i = 0; i < n; ++i)
+            {
+                local_symbols[fc.variables_[i]] = elem_types[i];
+            }
+
+            auto combined_symbols = symbols;
+            combined_symbols.insert(local_symbols.begin(), local_symbols.end());
+
+            // Infer body type
+            std::optional<type> body_type = infer_expression_type(fc.do_expr_->wrapped_, combined_symbols, decl_line);
+            if (!body_type) 
+                return {};
+
+            if (*body_type != type::int_scalar && *body_type != type::float_scalar)
+            {
+                errors_.emplace_back("Line " + std::to_string(decl_line) +
+                                     ": 'do' expression in array comprehension must be a scalar type, got '" +
+                                     type_to_string(*body_type) + "'");
+                return {};
+            }
+
+            return (*body_type == type::int_scalar) ? type::int_array : type::float_array;
+        },
     }, e);
 }
 
@@ -214,8 +288,8 @@ void semantic_analyzer::analyze(const program& prog)
         {
             errors_.emplace_back(
                 "Line " + std::to_string(decl.line_number_) + ": Type mismatch in declaration of '" + decl.name_ +
-                "': declared as " + type_to_string(decl.type_) +
-                " but expression has type " + type_to_string(*expr_type));
+                "': declared as '" + type_to_string(decl.type_) +
+                "' but expression has type '" + type_to_string(*expr_type) + "'");
         }
 
         symbols_[decl.name_] = decl.type_;
