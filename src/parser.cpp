@@ -1,4 +1,6 @@
 #include "parser.hpp"
+#include "utility.hpp"
+
 #include <cctype>
 #include <limits>
 #include <stdexcept>
@@ -229,7 +231,7 @@ std::optional<expr> parser::parse_number()
 
         try
         {
-            return expr(std::stof(str));
+            return expr(float_scalar{std::stod(str)});
         }
         catch (...)
         {
@@ -242,16 +244,8 @@ std::optional<expr> parser::parse_number()
     {
         try
         {
-            long long val = std::stoll(str);
-
-            if (val < std::numeric_limits<int32_t>::min() || val > std::numeric_limits<int32_t>::max())
-            {
-                error("Integer literal out of range");
-
-                return {};
-            }
-
-            return expr(static_cast<int32_t>(val));
+            int64_t val = std::stoll(str);
+            return expr(int_scalar{val});
         }
         catch (...)
         {
@@ -349,50 +343,39 @@ std::optional<expr> parser::parse_array_literal()
         return {};
     }
 
-    if (std::holds_alternative<int32_t>(*first))
+    auto parse_scalar_array = [&]<typename Sc>(Sc sc) -> std::optional<expr>
     {
-        std::vector<int32_t> values { std::get<int32_t>(*first) };
+        using Ar = typename to_array_t<Sc>::type;
+        typename Ar::vector_type values { std::get<Sc>(*first).value_ };
 
         while (match(','))
         {
             auto val = parse_number();
 
-            if (!val || !std::holds_alternative<int32_t>(*val))
+            if (!val || !std::holds_alternative<Sc>(*val))
             {
-                error("Type mismatch in int array literal");
+                error("Type mismatch in array literal");
 
                 return {};
             }
 
-            values.push_back(std::get<int32_t>(*val));
+            values.push_back(std::get<Sc>(*val).value_);
         }
 
         expect(']', "Expected ']' to close array literal");
 
-        return expr(int_array{std::move(values)});
-    }
-    else
-    {
-        std::vector<float> values { std::get<float>(*first) };
-
-        while (match(','))
+        return expr(Ar{std::move(values)});
+    };
+    
+    return std::visit(
+        overloaded
         {
-            auto val = parse_number();
-
-            if (!val || !std::holds_alternative<float>(*val))
-            {
-                error("Type mismatch in float array literal");
-
-                return {};
-            }
-
-            values.push_back(std::get<float>(*val));
-        }
-
-        expect(']', "Expected ']' to close array literal");
-
-        return expr(float_array{std::move(values)});
-    }
+            [&](int_scalar sc) -> std::optional<expr> { return parse_scalar_array(sc); },
+            [&](float_scalar sc) -> std::optional<expr> { return parse_scalar_array(sc); },
+            [](auto) -> std::optional<expr> { return {}; }
+        },
+        *first
+    );
 }
 
 std::optional<expr> parser::parse_function_call()

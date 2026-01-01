@@ -34,8 +34,8 @@ TEST_CASE("Single int declaration", "[valid]")
     const declaration& decl = prog.declarations_[0];
     REQUIRE(decl.type_ == type::int_scalar);
     REQUIRE(decl.name_ == "x");
-    REQUIRE(std::holds_alternative<int32_t>(decl.value_.wrapped_));
-    REQUIRE(std::get<int32_t>(decl.value_.wrapped_) == 42);
+    REQUIRE(std::holds_alternative<int_scalar>(decl.value_.wrapped_));
+    REQUIRE(std::get<int_scalar>(decl.value_.wrapped_).value_ == 42);
 }
 
 TEST_CASE("Function call with arguments", "[valid]")
@@ -57,14 +57,14 @@ TEST_CASE("Function call with arguments", "[valid]")
     REQUIRE(call.name_ == "foo");
     REQUIRE(call.args_.size() == 3);
 
-    REQUIRE(std::holds_alternative<int32_t>(call.args_[0].wrapped_));
-    REQUIRE(std::get<int32_t>(call.args_[0].wrapped_) == 1);
+    REQUIRE(std::holds_alternative<int_scalar>(call.args_[0].wrapped_));
+    REQUIRE(std::get<int_scalar>(call.args_[0].wrapped_).value_ == 1);
 
     REQUIRE(std::holds_alternative<id>(call.args_[1].wrapped_));
     REQUIRE(std::get<id>(call.args_[1].wrapped_) == "bar");
 
-    REQUIRE(std::holds_alternative<float>(call.args_[2].wrapped_));
-    REQUIRE(std::get<float>(call.args_[2].wrapped_) == 3.0f);
+    REQUIRE(std::holds_alternative<float_scalar>(call.args_[2].wrapped_));
+    REQUIRE(std::get<float_scalar>(call.args_[2].wrapped_).value_ == 3.0f);
 }
 
 TEST_CASE("Array literals and array types", "[valid]")
@@ -84,7 +84,7 @@ float[] float_arr = [1.0, 2.0, .5]
     REQUIRE(prog.declarations_[0].type_ == type::int_array);
     REQUIRE(std::holds_alternative<int_array>(prog.declarations_[0].value_.wrapped_));
     const int_array& iarr = std::get<int_array>(prog.declarations_[0].value_.wrapped_);
-    REQUIRE(iarr.values_ == std::vector<int32_t>{1, 2, 3});
+    REQUIRE(iarr.values_ == std::vector<int64_t>{1, 2, 3});
 
     REQUIRE(prog.declarations_[1].type_ == type::float_array);
     REQUIRE(std::holds_alternative<float_array>(prog.declarations_[1].value_.wrapped_));

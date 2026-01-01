@@ -26,19 +26,51 @@ struct f_call
     std::vector<expr_wrapper> args_;
 };
 
+struct int_scalar
+{
+    using value_type = int64_t;
+    using vector_type = std::vector<value_type>;
+    value_type value_;
+};
+
+struct float_scalar
+{
+    using value_type = double;
+    value_type value_;
+};
+
+
 struct int_array
 {
-    std::vector<int32_t> values_;
+    using vector_type = std::vector<int_scalar::value_type>;
+    vector_type values_;
 };
 
 struct float_array
 {
-    std::vector<float> values_;
+    using vector_type = std::vector<float_scalar::value_type>;
+    vector_type values_;
+};
+
+template<typename T>
+struct to_array_t
+{};
+
+template<>
+struct to_array_t<int_scalar>
+{
+    using type = int_array;
+};
+
+template<>
+struct to_array_t<float_scalar>
+{
+    using type = float_array;
 };
 
 using expr = std::variant<
-    int32_t,
-    float,
+    int_scalar,
+    float_scalar,
     id,
     f_call,
     int_array,
