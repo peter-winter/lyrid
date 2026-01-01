@@ -109,6 +109,48 @@ int c = foo()
     REQUIRE(prog.declarations_.size() == 3);
 }
 
+TEST_CASE("Nested function calls in arguments", "[valid]")
+{
+    parser p;
+    auto opt = p.parse("int result = foo(1, bar(2, 3.0), baz)");
+
+    REQUIRE(opt.has_value());
+    const program& prog = *opt;
+
+    REQUIRE(prog.is_valid());
+    REQUIRE(prog.declarations_.size() == 1);
+
+    const declaration& decl = prog.declarations_[0];
+    REQUIRE(decl.type_ == type::int_scalar);
+    REQUIRE(decl.name_ == "result");
+
+    REQUIRE(std::holds_alternative<f_call>(decl.value_.wrapped_));
+    const f_call& outer = std::get<f_call>(decl.value_.wrapped_);
+
+    REQUIRE(outer.name_ == "foo");
+    REQUIRE(outer.args_.size() == 3);
+
+    // First argument: integer literal
+    REQUIRE(std::holds_alternative<int_scalar>(outer.args_[0].wrapped_));
+    REQUIRE(std::get<int_scalar>(outer.args_[0].wrapped_).value_ == 1);
+
+    // Second argument: nested function call "bar(2, 3.0)"
+    REQUIRE(std::holds_alternative<f_call>(outer.args_[1].wrapped_));
+    const f_call& inner = std::get<f_call>(outer.args_[1].wrapped_);
+    REQUIRE(inner.name_ == "bar");
+    REQUIRE(inner.args_.size() == 2);
+
+    REQUIRE(std::holds_alternative<int_scalar>(inner.args_[0].wrapped_));
+    REQUIRE(std::get<int_scalar>(inner.args_[0].wrapped_).value_ == 2);
+
+    REQUIRE(std::holds_alternative<float_scalar>(inner.args_[1].wrapped_));
+    REQUIRE(std::get<float_scalar>(inner.args_[1].wrapped_).value_ == 3.0f);
+
+    // Third argument: identifier
+    REQUIRE(std::holds_alternative<id>(outer.args_[2].wrapped_));
+    REQUIRE(std::get<id>(outer.args_[2].wrapped_) == "baz");
+}
+
 TEST_CASE("Empty array literal causes syntax error", "[invalid]")
 {
     parser p;

@@ -25,6 +25,7 @@ include(Catch)
 
 add_library(lyrid_parser STATIC
     src/parser.cpp
+    src/semantic_analyzer.cpp
 )
 
 target_include_directories(lyrid_parser

@@ -87,6 +87,7 @@ struct declaration
     type type_;
     id name_;
     expr_wrapper value_;
+    size_t line_number_;
 };
 
 struct program
@@ -100,5 +101,3 @@ struct program
 };
 
 }
-
-

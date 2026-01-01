@@ -441,6 +441,8 @@ std::optional<expr> parser::parse_expr()
 
 bool parser::parse_declaration()
 {
+    size_t decl_line = line_;  // Capture the starting line of this declaration
+
     auto decl_type = parse_type();
 
     if (!decl_type)
@@ -480,7 +482,7 @@ bool parser::parse_declaration()
         return false;
     }
 
-    prog_.declarations_.emplace_back(declaration{*decl_type, std::move(name), expr_wrapper{*value}});
+    prog_.declarations_.emplace_back(declaration{*decl_type, std::move(name), expr_wrapper{*value}, decl_line});
 
     return true;
 }
