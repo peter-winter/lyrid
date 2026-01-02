@@ -160,3 +160,148 @@ float x = foo()
     const auto& call = std::get<f_call>(prog.declarations_[0].value_.wrapped_);
     REQUIRE(call.name_.proto_idx_.has_value());
 }
+
+TEST_CASE("Semantic error: redeclaration of variable", "[semantics][error]")
+{
+    parser p;
+    p.parse(R"(
+int x = 10
+int x = 20
+)");
+
+    const auto& parse_errors = p.get_errors();
+    REQUIRE(parse_errors.empty());
+
+    semantic_analyzer sa;
+    program& prog = p.get_program();
+    sa.analyze(prog);
+
+    REQUIRE(!sa.is_valid());
+    const auto& sem_errors = sa.get_errors();
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [3, 5]: Redeclaration of variable 'x'");
+}
+
+TEST_CASE("Semantic error: reference to undefined variable", "[semantics][error]")
+{
+    parser p;
+    p.parse("int y = x");
+
+    const auto& parse_errors = p.get_errors();
+    REQUIRE(parse_errors.empty());
+
+    semantic_analyzer sa;
+    program& prog = p.get_program();
+    sa.analyze(prog);
+
+    REQUIRE(!sa.is_valid());
+    const auto& sem_errors = sa.get_errors();
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [1, 9]: Undefined variable 'x'");
+}
+
+TEST_CASE("Semantic error: incorrect number of arguments in function call", "[semantics][error]")
+{
+    parser p;
+    p.parse("int res = foo(1, 2.0)");
+
+    const auto& parse_errors = p.get_errors();
+    REQUIRE(parse_errors.empty());
+
+    semantic_analyzer sa;
+    sa.register_function_prototype("foo", {type::int_scalar}, {"a"}, type::int_scalar);
+
+    program& prog = p.get_program();
+    sa.analyze(prog);
+
+    REQUIRE(!sa.is_valid());
+    const auto& sem_errors = sa.get_errors();
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [1, 11]: Incorrect number of arguments in call to 'foo': expected 1 but provided 2");
+}
+
+TEST_CASE("Semantic error: indexing non-array type", "[semantics][error]")
+{
+    parser p;
+    p.parse(R"(
+int scalar = 42
+int x = scalar[0]
+)");
+
+    const auto& parse_errors = p.get_errors();
+    REQUIRE(parse_errors.empty());
+
+    semantic_analyzer sa;
+    program& prog = p.get_program();
+    sa.analyze(prog);
+
+    REQUIRE(!sa.is_valid());
+    const auto& sem_errors = sa.get_errors();
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [3, 9]: Indexing applied to non-array type 'int'");
+}
+
+TEST_CASE("Semantic error: comprehension source expression not an array", "[semantics][error]")
+{
+    parser p;
+    p.parse(R"(
+int scalar = 42
+int[] res = [|i| in |scalar| do i]
+)");
+
+    const auto& parse_errors = p.get_errors();
+    REQUIRE(parse_errors.empty());
+
+    semantic_analyzer sa;
+    program& prog = p.get_program();
+    sa.analyze(prog);
+
+    REQUIRE(!sa.is_valid());
+    const auto& sem_errors = sa.get_errors();
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [3, 22]: Source in array comprehension must be an array type, got 'int'");
+}
+
+TEST_CASE("Semantic error: comprehension 'do' expression not scalar", "[semantics][error]")
+{
+    parser p;
+    p.parse(R"(
+int[] src = [1, 2]
+int[] inner = [|j| in |src| do j]
+int[] res = [|i| in |src| do inner]
+)");
+
+    const auto& parse_errors = p.get_errors();
+    REQUIRE(parse_errors.empty());
+
+    semantic_analyzer sa;
+    program& prog = p.get_program();
+    sa.analyze(prog);
+
+    REQUIRE(!sa.is_valid());
+    const auto& sem_errors = sa.get_errors();
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [4, 30]: 'do' expression in array comprehension must be a scalar type, got 'int[]'");
+}
+
+TEST_CASE("Semantic error: duplicate variable in comprehension", "[semantics][error]")
+{
+    parser p;
+    p.parse(R"(
+int[] src1 = [1, 2]
+int[] src2 = [3, 4]
+int[] res = [|x, x| in |src1, src2| do x]
+)");
+
+    const auto& parse_errors = p.get_errors();
+    REQUIRE(parse_errors.empty());
+
+    semantic_analyzer sa;
+    program& prog = p.get_program();
+    sa.analyze(prog);
+
+    REQUIRE(!sa.is_valid());
+    const auto& sem_errors = sa.get_errors();
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [4, 18]: Duplicate variable 'x' in array comprehension");
+}

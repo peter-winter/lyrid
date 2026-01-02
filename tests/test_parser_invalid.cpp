@@ -104,3 +104,44 @@ TEST_CASE("Missing = after identifier in declaration", "[parser][invalid]")
     REQUIRE(errors.size() == 1);
     REQUIRE(errors[0] == "Error [1, 7]: Expected '=' after identifier");
 }
+
+TEST_CASE("Float scalar - extra dot", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int x = .4.3");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 11]: Extra characters after expression");
+}
+
+TEST_CASE("Float scalar - two dots in a row", "[parser][invalid]")
+{
+    parser p;
+    p.parse("float x = 1..2");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 13]: Extra characters after expression");
+}
+
+TEST_CASE("Invalid integer literal: overflow", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int x = 999999999999999999999999999999999999999");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0].find("Invalid integer literal") != std::string::npos);
+}
+
+TEST_CASE("Invalid float literal: overflow", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int x = 999999999999999999999999999999999999999");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0].find("Invalid integer literal") != std::string::npos);
+}
+

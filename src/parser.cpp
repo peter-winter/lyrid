@@ -195,72 +195,61 @@ std::optional<expr_wrapper> parser::parse_number()
 {
     skip_horizontal_whitespace();
 
-    size_t start_line = line_;
-    size_t start_column = column_;
+    char c = peek();
+    if (c == '\0') return {};
 
-    std::string str;
-
-    if (peek() == '.')
-    {
-        str += advance();
-    }
-
-    while (std::isdigit(peek()))
-    {
-        str += advance();
-    }
-
-    if (peek() == '.')
-    {
-        str += advance();
-
-        while (std::isdigit(peek()))
-        {
-            str += advance();
-        }
-    }
-
-    if (str.empty())
+    if (!std::isdigit(static_cast<unsigned char>(c)) && c != '.')
     {
         return {};
     }
 
+    size_t start_line = line_;
+    size_t start_column = column_;
+
+    std::string str;
     bool has_digit = false;
-    for (char c : str)
+
+    // Integer part: zero or more digits
+    while (std::isdigit(peek()))
     {
-        if (std::isdigit(static_cast<unsigned char>(c)))
+        str += advance();
+        has_digit = true;
+    }
+
+    // Optional decimal point and fractional part
+    bool is_float = false;
+    if (peek() == '.')
+    {
+        str += advance();
+        is_float = true;
+
+        while (std::isdigit(peek()))
         {
+            str += advance();
             has_digit = true;
-            break;
         }
     }
 
     if (!has_digit)
     {
         source_location loc{start_line, start_column};
-        error(loc, "Invalid number literal");
+        error(loc, "Invalid number literal: no digits");
         return {};
     }
-
-    bool is_float = str.find('.') != std::string::npos;
 
     source_location loc{start_line, start_column};
 
     if (is_float)
     {
-        if (str.front() == '.')
-        {
-            str = "0" + str;
-        }
-
-        if (str.back() == '.')
-        {
-            str += "0";
-        }
-
         try
         {
-            double val = std::stod(str);
+            size_t pos = 0;
+            double val = std::stod(str, &pos);
+            if (pos != str.size())
+            {
+                error(loc, "Invalid float literal");
+                return {};
+            }
             return expr_wrapper(expr(float_scalar{val}), loc);
         }
         catch (...)
@@ -273,7 +262,13 @@ std::optional<expr_wrapper> parser::parse_number()
     {
         try
         {
-            int64_t val = std::stoll(str);
+            size_t pos = 0;
+            int64_t val = std::stoll(str, &pos);
+            if (pos != str.size())
+            {
+                error(loc, "Invalid integer literal");
+                return {};
+            }
             return expr_wrapper(expr(int_scalar{val}), loc);
         }
         catch (...)
