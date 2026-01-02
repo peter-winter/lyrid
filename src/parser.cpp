@@ -26,6 +26,7 @@ void parser::parse(const std::string& source)
     input_ = source;
     pos_ = 0;
     line_ = 1;
+    column_ = 1;
     prog_ = program{};
     errors_.clear();
 
@@ -34,6 +35,7 @@ void parser::parse(const std::string& source)
     while (peek() != '\0')
     {
         size_t decl_start_line = line_;
+        size_t decl_start_column = column_;
         size_t start_errors = errors_.size();
 
         bool success = parse_declaration();
@@ -42,7 +44,8 @@ void parser::parse(const std::string& source)
         {
             if (errors_.size() == start_errors)
             {
-                errors_.emplace_back("Line " + std::to_string(decl_start_line) + ": Invalid declaration");
+                source_location generic_loc{decl_start_line, decl_start_column};
+                error(generic_loc, "Invalid declaration");
             }
 
             // Recovery: skip to the end of the current line
@@ -87,6 +90,11 @@ char parser::advance()
         if (c == '\n')
         {
             ++line_;
+            column_ = 1;
+        }
+        else
+        {
+            ++column_;
         }
     }
 
@@ -141,25 +149,29 @@ void parser::expect(char expected, const std::string& message)
 {
     if (!match(expected))
     {
-        error(message);
+        source_location loc{line_, column_};
+        error(loc, message);
     }
 }
 
-void parser::error(const std::string& message)
+void parser::error(const source_location& loc, const std::string& message)
 {
-    errors_.emplace_back("Line " + std::to_string(line_) + ": " + message);
+    std::string prefix = "Error [" + std::to_string(loc.line_) + ", " +
+                         std::to_string(loc.column_) + "]: ";
+    errors_.emplace_back(prefix + message);
 }
 
-std::string parser::parse_identifier()
+std::optional<std::pair<std::string, source_location>> parser::parse_identifier()
 {
     skip_horizontal_whitespace();
 
     if (!std::isalpha(peek()) && peek() != '_')
     {
-        return "";
+        return {};
     }
 
-    size_t start = pos_;
+    size_t start_line = line_;
+    size_t start_column = column_;
 
     advance();
 
@@ -168,12 +180,18 @@ std::string parser::parse_identifier()
         advance();
     }
 
-    return input_.substr(start, pos_ - start);
+    source_location loc{start_line, start_column};
+    std::string identifier = input_.substr(pos_ - (column_ - start_column), column_ - start_column);
+
+    return {{std::move(identifier), loc}};
 }
 
-std::optional<expr> parser::parse_number()
+std::optional<expr_wrapper> parser::parse_number()
 {
     skip_horizontal_whitespace();
+
+    size_t start_line = line_;
+    size_t start_column = column_;
 
     std::string str;
 
@@ -203,23 +221,25 @@ std::optional<expr> parser::parse_number()
     }
 
     bool has_digit = false;
-
     for (char c : str)
     {
-        if (std::isdigit(c))
+        if (std::isdigit(static_cast<unsigned char>(c)))
         {
             has_digit = true;
-
             break;
         }
     }
 
     if (!has_digit)
     {
+        source_location loc{start_line, start_column};
+        error(loc, "Invalid number literal");
         return {};
     }
 
     bool is_float = str.find('.') != std::string::npos;
+
+    source_location loc{start_line, start_column};
 
     if (is_float)
     {
@@ -235,12 +255,12 @@ std::optional<expr> parser::parse_number()
 
         try
         {
-            return expr(float_scalar{std::stod(str)});
+            double val = std::stod(str);
+            return expr_wrapper(expr(float_scalar{val}), loc);
         }
         catch (...)
         {
-            error("Invalid float literal");
-
+            error(loc, "Invalid float literal");
             return {};
         }
     }
@@ -249,12 +269,11 @@ std::optional<expr> parser::parse_number()
         try
         {
             int64_t val = std::stoll(str);
-            return expr(int_scalar{val});
+            return expr_wrapper(expr(int_scalar{val}), loc);
         }
         catch (...)
         {
-            error("Invalid integer literal");
-
+            error(loc, "Invalid integer literal");
             return {};
         }
     }
@@ -262,9 +281,15 @@ std::optional<expr> parser::parse_number()
 
 std::optional<type> parser::parse_type()
 {
-    skip_horizontal_whitespace();
+    auto kw_opt = parse_identifier();
 
-    std::string kw = parse_identifier();
+    if (!kw_opt)
+    {
+        return {};
+    }
+
+    std::string kw = std::move(kw_opt->first);
+    source_location kw_loc = kw_opt->second;
 
     bool is_array = match('[');
 
@@ -283,11 +308,7 @@ std::optional<type> parser::parse_type()
         return is_array ? type::float_array : type::float_scalar;
     }
 
-    if (!kw.empty())
-    {
-        error("Unknown type '" + kw + "'; expected 'int' or 'float'");
-    }
-
+    error(kw_loc, "Unknown type '" + kw + "'; expected 'int' or 'float'");
     return {};
 }
 
@@ -308,12 +329,12 @@ std::optional<std::vector<expr_wrapper>> parser::parse_arg_list()
 
         if (!e)
         {
-            error("Expected expression in argument list");
-
+            source_location loc{line_, column_};
+            error(loc, "Expected expression in argument list");
             return {};
         }
 
-        args.emplace_back(expr_wrapper{std::move(*e)});
+        args.emplace_back(std::move(*e));
     }
     while (match(','));
 
@@ -322,17 +343,18 @@ std::optional<std::vector<expr_wrapper>> parser::parse_arg_list()
     return args;
 }
 
-std::optional<array_construction> parser::parse_literal_array_construction()
+std::optional<std::vector<expr_wrapper>> parser::parse_literal_array_construction()
 {
     std::vector<expr_wrapper> elements;
 
     auto first_opt = parse_expr();
     if (!first_opt)
     {
-        error("Expected expression in array literal");
+        source_location loc{line_, column_};
+        error(loc, "Expected expression in array literal");
         return {};
     }
-    elements.emplace_back(expr_wrapper{std::move(*first_opt)});
+    elements.emplace_back(std::move(*first_opt));
 
     while (true)
     {
@@ -341,89 +363,94 @@ std::optional<array_construction> parser::parse_literal_array_construction()
         {
             break;
         }
-        skip_horizontal_whitespace();
         auto elem_opt = parse_expr();
         if (!elem_opt)
         {
-            error("Expected expression after ',' in array literal");
+            source_location loc{line_, column_};
+            error(loc, "Expected expression after ',' in array literal");
             return {};
         }
-        elements.emplace_back(expr_wrapper{std::move(*elem_opt)});
+        elements.emplace_back(std::move(*elem_opt));
     }
 
-    return array_construction{std::move(elements)};
+    return elements;
 }
 
 std::optional<comprehension> parser::parse_array_comprehension()
 {
-    // Expect opening '|' for variables
     skip_horizontal_whitespace();
+
+    size_t comp_start_line = line_;
+    size_t comp_start_column = column_;
+
     if (!match('|'))
     {
-        error("Expected '|' to start variable list in array comprehension");
+        error({comp_start_line, comp_start_column}, "Expected '|' to start variable list in array comprehension");
         return {};
     }
 
-    // Parse variables (comma-separated identifiers, at least one)
-    std::vector<std::string> variables;
+    source_location comp_loc{comp_start_line, comp_start_column};  // Points to the first '|'
+
+    std::vector<identifier> variables;
+
     skip_horizontal_whitespace();
 
-    // Check for empty variable list early
     if (match('|'))
     {
-        error("Array comprehension must have at least one variable");
+        error(comp_loc, "Array comprehension must have at least one variable");
         return {};
     }
 
     do
     {
-        std::string var = parse_identifier();
-        if (var.empty())
+        auto var_opt = parse_identifier();
+        if (!var_opt)
         {
-            error("Expected identifier in variable list");
+            source_location loc{line_, column_};
+            error(loc, "Expected identifier in variable list");
             return {};
         }
-        variables.push_back(std::move(var));
+
+        variables.emplace_back(identifier{std::move(var_opt->first), var_opt->second});
 
         skip_horizontal_whitespace();
     } while (match(','));
 
-    // Expect closing '|' for variables
     if (!match('|'))
     {
-        error("Expected '|' to close variable list in array comprehension");
+        source_location loc{line_, column_};
+        error(loc, "Expected '|' to close variable list in array comprehension");
         return {};
     }
 
-    // Expect 'in' keyword
     skip_horizontal_whitespace();
-    std::string in_kw = parse_identifier();
-    if (in_kw != "in")
+    auto in_opt = parse_identifier();
+    if (!in_opt || in_opt->first != "in")
     {
-        error("Expected 'in' after variable list in array comprehension");
+        source_location loc = in_opt ? in_opt->second : source_location{line_, column_};
+        error(comp_loc, "Expected 'in' after variable list in array comprehension");
         return {};
     }
 
-    // Expect opening '|' for sources
     skip_horizontal_whitespace();
     if (!match('|'))
     {
-        error("Expected '|' to start source expression list in array comprehension");
+        source_location loc{line_, column_};
+        error(loc, "Expected '|' to start source expression list in array comprehension");
         return {};
     }
 
-    // Parse source expressions (comma-separated, count must match variables)
     std::vector<expr_wrapper> in_exprs;
     skip_horizontal_whitespace();
 
-    // Require at least one source expression (mismatch will be caught below anyway)
     auto src_opt = parse_expr();
     if (!src_opt)
     {
-        error("Expected source expression in 'in' clause");
+        source_location loc{line_, column_};
+        error(loc, "Expected source expression in 'in' clause");
         return {};
     }
-    in_exprs.emplace_back(expr_wrapper{std::move(*src_opt)});
+    in_exprs.emplace_back(std::move(*src_opt));
 
     while (true)
     {
@@ -436,58 +463,59 @@ std::optional<comprehension> parser::parse_array_comprehension()
         src_opt = parse_expr();
         if (!src_opt)
         {
-            error("Expected source expression after ',' in 'in' clause");
+            source_location loc{line_, column_};
+            error(loc, "Expected source expression after ',' in 'in' clause");
             return {};
         }
-        in_exprs.emplace_back(expr_wrapper{std::move(*src_opt)});
+        in_exprs.emplace_back(std::move(*src_opt));
     }
 
-    // Check count mismatch (syntax error as originally required)
     if (in_exprs.size() != variables.size())
     {
-        error("Number of variables (" + std::to_string(variables.size()) +
+        error(comp_loc,
+              "Number of variables (" + std::to_string(variables.size()) +
               ") and source expressions (" + std::to_string(in_exprs.size()) +
               ") must match in array comprehension");
         return {};
     }
 
-    // Expect closing '|' for sources
-    skip_horizontal_whitespace();
     if (!match('|'))
     {
-        error("Expected '|' to close source expression list in array comprehension");
+        source_location loc{line_, column_};
+        error(loc, "Expected '|' to close source expression list in array comprehension");
         return {};
     }
 
-    // Expect 'do' keyword
     skip_horizontal_whitespace();
-    std::string do_kw = parse_identifier();
-    if (do_kw != "do")
+    auto do_opt = parse_identifier();
+    if (!do_opt || do_opt->first != "do")
     {
-        error("Expected 'do' after source list in array comprehension");
+        source_location loc = do_opt ? do_opt->second : source_location{line_, column_};
+        error(comp_loc, "Expected 'do' after source list in array comprehension");
         return {};
     }
 
-    // Parse body expression
     skip_horizontal_whitespace();
     auto body_opt = parse_expr();
     if (!body_opt)
     {
-        error("Expected expression after 'do' in array comprehension");
+        source_location loc{line_, column_};
+        error(loc, "Expected expression after 'do' in array comprehension");
         return {};
     }
-
-    auto do_wrapper = std::make_unique<expr_wrapper>(expr_wrapper{std::move(*body_opt)});
 
     return comprehension{
         std::move(variables),
         std::move(in_exprs),
-        std::move(do_wrapper)
+        std::make_unique<expr_wrapper>(std::move(*body_opt))
     };
 }
 
-std::optional<expr> parser::parse_array_construction()
+std::optional<expr_wrapper> parser::parse_array_construction()
 {
+    size_t start_line = line_;
+    size_t start_column = column_;
+
     if (!match('['))
     {
         return {};
@@ -495,29 +523,33 @@ std::optional<expr> parser::parse_array_construction()
 
     skip_horizontal_whitespace();
 
-    // Disallow empty array
     if (match(']'))
     {
-        error("Array construction cannot be empty; expected elements or a comprehension");
+        source_location loc{start_line, start_column};
+        error(loc, "Array construction cannot be empty; expected elements or a comprehension");
         return {};
     }
 
-    // Distinguish comprehension (starts with '|') from literal array
     size_t save_pos = pos_;
     size_t save_line = line_;
+    size_t save_column = column_;
+
     skip_horizontal_whitespace();
 
-    if (match('|'))
-    {
-        // Comprehension path
-        pos_ = save_pos;   // rollback the matched '|'
-        line_ = save_line;
+    bool is_comprehension = match('|');
 
+    pos_ = save_pos;
+    line_ = save_line;
+    column_ = save_column;
+
+    source_location array_loc{start_line, start_column};
+
+    if (is_comprehension)
+    {
         auto comp_opt = parse_array_comprehension();
         if (!comp_opt)
         {
-            // Recovery: skip to ']'
-            while (peek() != ']' && peek() != '\0' && peek() != '\n')
+            while (peek() != ']' && peek() != '\0')
             {
                 advance();
             }
@@ -526,21 +558,21 @@ std::optional<expr> parser::parse_array_construction()
         }
 
         skip_horizontal_whitespace();
-        expect(']', "Expected ']' to close array comprehension");
+        source_location close_loc{line_, column_};
+        if (!match(']'))
+        {
+            error(close_loc, "Expected ']' to close array comprehension");
+            return {};
+        }
 
-        return expr(std::move(*comp_opt));
+        return expr_wrapper(expr(std::move(*comp_opt)), array_loc);
     }
     else
     {
-        // Literal array path
-        pos_ = save_pos;
-        line_ = save_line;
-
         auto lit_opt = parse_literal_array_construction();
         if (!lit_opt)
         {
-            // Recovery
-            while (peek() != ']' && peek() != '\0' && peek() != '\n')
+            while (peek() != ']' && peek() != '\0')
             {
                 advance();
             }
@@ -549,76 +581,106 @@ std::optional<expr> parser::parse_array_construction()
         }
 
         skip_horizontal_whitespace();
-        expect(']', "Expected ']' to close array literal");
+        source_location close_loc{line_, column_};
+        if (!match(']'))
+        {
+            error(close_loc, "Expected ']' to close array literal");
+            return {};
+        }
 
-        return expr(std::move(*lit_opt));
+        return expr_wrapper(expr(array_construction{std::move(*lit_opt)}), array_loc);
     }
 }
 
-std::optional<expr> parser::parse_primary()
+std::optional<expr_wrapper> parser::parse_primary()
 {
     skip_horizontal_whitespace();
 
-    auto num = parse_number();
-    if (num)
+    size_t primary_start_line = line_;
+    size_t primary_start_column = column_;
+
+    auto num_opt = parse_number();
+    if (num_opt)
     {
-        return num;
+        return std::move(*num_opt);
     }
 
-    auto arr = parse_array_construction();
-    if (arr)
+    auto arr_opt = parse_array_construction();
+    if (arr_opt)
     {
-        return arr;
+        return std::move(*arr_opt);
     }
 
-    std::string name = parse_identifier();
-    if (name.empty())
+    auto id_opt = parse_identifier();
+    if (id_opt)
     {
-        return {};
-    }
+        identifier ident{std::move(id_opt->first), id_opt->second};
 
-    if (match('('))
-    {
-        auto args_opt = parse_arg_list();
-        if (!args_opt)
+        if (match('('))
         {
-            return {};
+            auto args_opt = parse_arg_list();
+            if (!args_opt)
+            {
+                return {};
+            }
+
+            source_location call_loc{primary_start_line, primary_start_column};
+            f_call call{std::move(ident), std::move(*args_opt)};
+            return expr_wrapper(expr(std::move(call)), call_loc);
         }
 
-        return expr(f_call{std::move(name), std::move(*args_opt)});
+        return expr_wrapper(expr(std::move(ident)), ident.loc_);
     }
 
-    return expr(id{std::move(name)});
+    return {};
 }
 
-std::optional<expr> parser::parse_expr()
+std::optional<expr_wrapper> parser::try_parse_index_access(expr_wrapper&& base)
 {
-    auto base = parse_primary();
-
-    if (!base)
+    if (!match('['))
     {
         return {};
     }
 
-    expr current = std::move(*base);
-
-    if (match('['))
+    auto index_opt = parse_expr();
+    if (!index_opt)
     {
-        auto index = parse_expr();
+        source_location loc{line_, column_};
+        error(loc, "Expected index expression");
+        return {};
+    }
 
-        if (!index)
-        {
-            error("Expected index expression");
+    if (!match(']'))
+    {
+        source_location loc{line_, column_};
+        error(loc, "Expected ']' after index expression");
+        return {};
+    }
 
-            return {};
-        }
+    source_location whole_loc{base.loc.line_, base.loc.column_};
 
-        expect(']', "Expected ']' after index expression");
+    index_access acc{
+        std::make_unique<expr_wrapper>(std::move(base)),
+        std::make_unique<expr_wrapper>(std::move(*index_opt))
+    };
 
-        auto base_wrapper = std::make_unique<expr_wrapper>(expr_wrapper{std::move(current)});
-        auto index_wrapper = std::make_unique<expr_wrapper>(expr_wrapper{std::move(*index)});
+    return expr_wrapper(expr(std::move(acc)), whole_loc);
+}
 
-        return expr(index_access{std::move(base_wrapper), std::move(index_wrapper)});
+std::optional<expr_wrapper> parser::parse_expr()
+{
+    auto prim_opt = parse_primary();
+    if (!prim_opt)
+    {
+        return {};
+    }
+
+    auto current = std::move(*prim_opt);
+
+    auto indexed_opt = try_parse_index_access(std::move(current));
+    if (indexed_opt)
+    {
+        return std::move(*indexed_opt);
     }
 
     return current;
@@ -626,34 +688,33 @@ std::optional<expr> parser::parse_expr()
 
 bool parser::parse_declaration()
 {
-    size_t decl_line = line_;  // Capture the starting line of this declaration
+    size_t decl_start_line = line_;
+    size_t decl_start_column = column_;
 
-    auto decl_type = parse_type();
-
-    if (!decl_type)
+    auto decl_type_opt = parse_type();
+    if (!decl_type_opt)
     {
         return false;
     }
 
-    std::string name = parse_identifier();
-
-    if (name.empty())
+    auto name_opt = parse_identifier();
+    if (!name_opt)
     {
-        error("Expected identifier after type");
-
+        source_location loc{line_, column_};
+        error(loc, "Expected identifier after type");
         return false;
     }
+    identifier name{std::move(name_opt->first), name_opt->second};
 
     if (!match('='))
     {
-        error("Expected '=' after identifier");
-
+        source_location loc{line_, column_};
+        error(loc, "Expected '=' after identifier");
         return false;
     }
 
-    auto value = parse_expr();
-
-    if (!value)
+    auto value_opt = parse_expr();
+    if (!value_opt)
     {
         return false;
     }
@@ -662,12 +723,19 @@ bool parser::parse_declaration()
 
     if (peek() != '\0' && peek() != '\n')
     {
-        error("Extra characters after expression");
-
+        source_location extra_loc{line_, column_};
+        error(extra_loc, "Extra characters after expression");
         return false;
     }
 
-    prog_.declarations_.emplace_back(declaration{*decl_type, std::move(name), std::move(*value), decl_line});
+    source_location decl_loc{decl_start_line, decl_start_column};
+
+    prog_.declarations_.emplace_back(declaration{
+        *decl_type_opt,
+        std::move(name),
+        std::move(*value_opt),
+        decl_loc
+    });
 
     return true;
 }

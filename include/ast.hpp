@@ -1,3 +1,4 @@
+// Updated include/ast.hpp
 #pragma once
 
 #include <variant>
@@ -14,13 +15,23 @@ namespace lyrid
 namespace ast
 {
 
-using id = std::string;
+struct source_location
+{
+    size_t line_;
+    size_t column_;
+};
+
+struct identifier
+{
+    std::string value_;
+    source_location loc_;
+};
 
 struct expr_wrapper;
 
 struct f_call
 {
-    id name_;
+    identifier name_;
     std::vector<expr_wrapper> args_;
 };
 
@@ -37,7 +48,7 @@ struct array_construction
 
 struct comprehension
 {
-    std::vector<std::string> variables_;
+    std::vector<identifier> variables_;
     std::vector<expr_wrapper> in_exprs_;
     std::unique_ptr<expr_wrapper> do_expr_;
 };
@@ -57,7 +68,7 @@ struct float_scalar
 using expr = std::variant<
     int_scalar,
     float_scalar,
-    id,
+    identifier,
     f_call,
     index_access,
     array_construction,
@@ -67,14 +78,18 @@ using expr = std::variant<
 struct expr_wrapper
 {
     expr wrapped_;
+    source_location loc;
+
+    expr_wrapper(expr e, source_location l)
+        : wrapped_(std::move(e)), loc(std::move(l)) {}
 };
 
 struct declaration
 {
     type type_;
-    id name_;
-    expr value_;
-    size_t line_number_;
+    identifier name_;
+    expr_wrapper value_;
+    source_location loc;
 };
 
 struct program

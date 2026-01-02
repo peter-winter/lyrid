@@ -39,10 +39,9 @@ public:
 private:
     std::string type_to_string(type t) const;
 
-    std::optional<type> infer_expression_type(
-        const ast::expr& e,
-        const std::map<std::string, type>& symbols,
-        size_t decl_line);
+    void error(const ast::source_location& loc, const std::string& message);
+    
+    std::optional<type> infer_expression_type(const ast::expr_wrapper& wrapper, const std::map<std::string, type>& symbols);
 
     std::map<std::string, prototype> functions_;
     std::vector<std::string> errors_;

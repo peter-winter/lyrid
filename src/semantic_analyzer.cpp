@@ -7,7 +7,13 @@ namespace lyrid
 {
 
 using namespace ast;
-using namespace lyrid::ast;
+
+void semantic_analyzer::error(const source_location& loc, const std::string& message)
+{
+    std::string prefix = "Error [" + std::to_string(loc.line_) + ", " +
+                         std::to_string(loc.column_) + "]: ";
+    errors_.emplace_back(prefix + message);
+}
 
 void semantic_analyzer::register_function_prototype(
     const std::string& name,
@@ -37,9 +43,8 @@ std::string semantic_analyzer::type_to_string(type t) const
 }
 
 std::optional<type> semantic_analyzer::infer_expression_type(
-    const expr& e,
-    const std::map<std::string, type>& symbols,
-    size_t decl_line)
+    const expr_wrapper& wrapper,
+    const std::map<std::string, type>& symbols)
 {
     return std::visit(overloaded
     {
@@ -51,22 +56,22 @@ std::optional<type> semantic_analyzer::infer_expression_type(
         {
             return type::float_scalar;
         },
-        [&](const id& i) -> std::optional<type>
+        [&](const identifier& i) -> std::optional<type>
         {
-            auto it = symbols.find(i);
+            auto it = symbols.find(i.value_);
             if (it == symbols.end())
             {
-                errors_.emplace_back("Line " + std::to_string(decl_line) + ": Undefined variable '" + i + "'");
+                error(i.loc_, "Undefined variable '" + i.value_ + "'");
                 return {};
             }
             return it->second;
         },
         [&](const f_call& call) -> std::optional<type>
         {
-            auto fit = functions_.find(call.name_);
+            auto fit = functions_.find(call.name_.value_);
             if (fit == functions_.end())
             {
-                errors_.emplace_back("Line " + std::to_string(decl_line) + ": Call to undefined function '" + call.name_ + "'");
+                error(call.name_.loc_, "Call to undefined function '" + call.name_.value_ + "'");
                 return {};
             }
 
@@ -74,16 +79,16 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             if (call.args_.size() != proto.arg_types.size())
             {
-                errors_.emplace_back(
-                    "Line " + std::to_string(decl_line) + ": Incorrect number of arguments in call to '" + call.name_ +
-                    "': expected " + std::to_string(proto.arg_types.size()) +
-                    " but provided " + std::to_string(call.args_.size()));
+                error(wrapper.loc,
+                      "Incorrect number of arguments in call to '" + call.name_.value_ +
+                      "': expected " + std::to_string(proto.arg_types.size()) +
+                      " but provided " + std::to_string(call.args_.size()));
                 return {};
             }
 
             for (size_t i = 0; i < call.args_.size(); ++i)
             {
-                std::optional<type> arg_type = infer_expression_type(call.args_[i].wrapped_, symbols, decl_line);
+                std::optional<type> arg_type = infer_expression_type(call.args_[i], symbols);
                 if (!arg_type)
                 {
                     return {};
@@ -95,10 +100,11 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                         ? "argument " + std::to_string(i + 1)
                         : "'" + proto.arg_names[i] + "'";
 
-                    errors_.emplace_back(
-                        "Line " + std::to_string(decl_line) + ": Type mismatch for " + arg_name + " in call to '" + call.name_ +
-                        "': expected '" + type_to_string(proto.arg_types[i]) +
-                        "' but got '" + type_to_string(*arg_type) + "'");
+                    error(call.args_[i].loc,
+                          "Type mismatch for " + arg_name + " in call to '" + call.name_.value_ +
+                          "': expected '" + type_to_string(proto.arg_types[i]) +
+                          "' but got '" + type_to_string(*arg_type) + "'");
+                    return {};
                 }
             }
 
@@ -106,7 +112,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
         },
         [&](const index_access& acc) -> std::optional<type>
         {
-            std::optional<type> base_type = infer_expression_type(acc.base_->wrapped_, symbols, decl_line);
+            std::optional<type> base_type = infer_expression_type(*acc.base_, symbols);
 
             if (!base_type)
             {
@@ -125,14 +131,12 @@ std::optional<type> semantic_analyzer::infer_expression_type(
             }
             else
             {
-                errors_.emplace_back(
-                    "Line " + std::to_string(decl_line) +
-                    ": Indexing applied to non-array type '" + type_to_string(*base_type) + "'");
-
+                error(acc.base_->loc,
+                      "Indexing applied to non-array type '" + type_to_string(*base_type) + "'");
                 return {};
             }
 
-            std::optional<type> index_type = infer_expression_type(acc.index_->wrapped_, symbols, decl_line);
+            std::optional<type> index_type = infer_expression_type(*acc.index_, symbols);
 
             if (!index_type)
             {
@@ -141,10 +145,8 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             if (*index_type != type::int_scalar)
             {
-                errors_.emplace_back(
-                    "Line " + std::to_string(decl_line) +
-                    ": Array index must be of type 'int', but got '" + type_to_string(*index_type) + "'");
-
+                error(acc.index_->loc,
+                      "Array index must be of type 'int', but got '" + type_to_string(*index_type) + "'");
                 return {};
             }
 
@@ -154,7 +156,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
         {
             if (ac.elements_.empty())
             {
-                errors_.emplace_back("Line " + std::to_string(decl_line) + ": Empty array construction is not allowed");
+                error(wrapper.loc, "Empty array construction is not allowed");
                 return {};
             }
 
@@ -162,7 +164,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             for (const auto& elem : ac.elements_)
             {
-                std::optional<type> t_opt = infer_expression_type(elem.wrapped_, symbols, decl_line);
+                std::optional<type> t_opt = infer_expression_type(elem, symbols);
 
                 if (!t_opt)
                 {
@@ -173,10 +175,8 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
                 if (t != type::int_scalar && t != type::float_scalar)
                 {
-                    errors_.emplace_back(
-                        "Line " + std::to_string(decl_line) +
-                        ": Array construction elements must be scalar types, but got '" + type_to_string(t) + "'");
-
+                    error(elem.loc,
+                          "Array construction elements must be scalar types, but got '" + type_to_string(t) + "'");
                     return {};
                 }
 
@@ -186,11 +186,9 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                 }
                 else if (t != *elem_type)
                 {
-                    errors_.emplace_back(
-                        "Line " + std::to_string(decl_line) +
-                        ": Type mismatch in array construction: expected '" + type_to_string(*elem_type) +
-                        "' but got '" + type_to_string(t) + "'");
-
+                    error(elem.loc,
+                          "Type mismatch in array construction: expected '" + type_to_string(*elem_type) +
+                          "' but got '" + type_to_string(t) + "'");
                     return {};
                 }
             }
@@ -203,15 +201,14 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             if (n == 0 || n != fc.in_exprs_.size())
             {
-                errors_.emplace_back("Line " + std::to_string(decl_line) + ": Invalid array comprehension (mismatched variables/sources)");
+                error(wrapper.loc, "Invalid array comprehension (mismatched variables/sources)");
                 return {};
             }
 
-            // Infer element types of sources
             std::vector<type> elem_types;
             for (const auto& src : fc.in_exprs_)
             {
-                std::optional<type> src_type = infer_expression_type(src.wrapped_, symbols, decl_line);
+                std::optional<type> src_type = infer_expression_type(src, symbols);
                 if (!src_type) return {};
 
                 type elem_t;
@@ -225,52 +222,48 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                 }
                 else
                 {
-                    errors_.emplace_back("Line " + std::to_string(decl_line) +
-                                         ": Source in array comprehension must be an array type, got '" +
-                                         type_to_string(*src_type) + "'");
+                    error(src.loc,
+                          "Source in array comprehension must be an array type, got '" +
+                          type_to_string(*src_type) + "'");
                     return {};
                 }
                 elem_types.push_back(elem_t);
             }
 
-            // Check variable uniqueness (semantic phase as requested)
             std::set<std::string> seen;
-            for (const std::string& v : fc.variables_)
+            for (const auto& v : fc.variables_)
             {
-                if (!seen.insert(v).second)
+                if (!seen.insert(v.value_).second)
                 {
-                    errors_.emplace_back("Line " + std::to_string(decl_line) +
-                                         ": Duplicate variable '" + v + "' in array comprehension");
+                    error(v.loc_, "Duplicate variable '" + v.value_ + "' in array comprehension");
                     return {};
                 }
             }
 
-            // Temporary scope: local symbols (shadows outer symbols)
             std::map<std::string, type> local_symbols;
             for (size_t i = 0; i < n; ++i)
             {
-                local_symbols[fc.variables_[i]] = elem_types[i];
+                local_symbols[fc.variables_[i].value_] = elem_types[i];
             }
 
             auto combined_symbols = symbols;
             combined_symbols.insert(local_symbols.begin(), local_symbols.end());
 
-            // Infer body type
-            std::optional<type> body_type = infer_expression_type(fc.do_expr_->wrapped_, combined_symbols, decl_line);
+            std::optional<type> body_type = infer_expression_type(*fc.do_expr_, combined_symbols);
             if (!body_type) 
                 return {};
 
             if (*body_type != type::int_scalar && *body_type != type::float_scalar)
             {
-                errors_.emplace_back("Line " + std::to_string(decl_line) +
-                                     ": 'do' expression in array comprehension must be a scalar type, got '" +
-                                     type_to_string(*body_type) + "'");
+                error(fc.do_expr_->loc,
+                      "'do' expression in array comprehension must be a scalar type, got '" +
+                      type_to_string(*body_type) + "'");
                 return {};
             }
 
             return (*body_type == type::int_scalar) ? type::int_array : type::float_array;
         },
-    }, e);
+    }, wrapper.wrapped_);
 }
 
 void semantic_analyzer::analyze(const program& prog)
@@ -280,22 +273,22 @@ void semantic_analyzer::analyze(const program& prog)
 
     for (const auto& decl : prog.declarations_)
     {
-        if (symbols_.contains(decl.name_))
+        if (symbols_.contains(decl.name_.value_))
         {
-            errors_.emplace_back("Line " + std::to_string(decl.line_number_) + ": Redeclaration of variable '" + decl.name_ + "'");
+            error(decl.name_.loc_, "Redeclaration of variable '" + decl.name_.value_ + "'");
         }
 
-        std::optional<type> expr_type = infer_expression_type(decl.value_, symbols_, decl.line_number_);
+        std::optional<type> expr_type = infer_expression_type(decl.value_, symbols_);
 
         if (expr_type && *expr_type != decl.type_)
         {
-            errors_.emplace_back(
-                "Line " + std::to_string(decl.line_number_) + ": Type mismatch in declaration of '" + decl.name_ +
-                "': declared as '" + type_to_string(decl.type_) +
-                "' but expression has type '" + type_to_string(*expr_type) + "'");
+            error(decl.value_.loc,
+                  "Type mismatch in declaration of '" + decl.name_.value_ +
+                  "': declared as '" + type_to_string(decl.type_) +
+                  "' but expression has type '" + type_to_string(*expr_type) + "'");
         }
 
-        symbols_[decl.name_] = decl.type_;
+        symbols_[decl.name_.value_] = decl.type_;
     }
 }
 

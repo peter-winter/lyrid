@@ -1,3 +1,4 @@
+// tests/test_parser.cpp
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
@@ -37,9 +38,9 @@ TEST_CASE("Single int declaration", "[valid]")
 
     const declaration& decl = prog.declarations_[0];
     REQUIRE(decl.type_ == type::int_scalar);
-    REQUIRE(decl.name_ == "x");
-    REQUIRE(std::holds_alternative<int_scalar>(decl.value_));
-    REQUIRE(std::get<int_scalar>(decl.value_).value_ == 42);
+    REQUIRE(decl.name_.value_ == "x");
+    REQUIRE(std::holds_alternative<int_scalar>(decl.value_.wrapped_));
+    REQUIRE(std::get<int_scalar>(decl.value_.wrapped_).value_ == 42);
 }
 
 TEST_CASE("Function call with arguments", "[valid]")
@@ -56,17 +57,17 @@ TEST_CASE("Function call with arguments", "[valid]")
 
     const declaration& decl = prog.declarations_[0];
     REQUIRE(decl.type_ == type::int_scalar);
-    REQUIRE(std::holds_alternative<f_call>(decl.value_));
+    REQUIRE(std::holds_alternative<f_call>(decl.value_.wrapped_));
 
-    const f_call& call = std::get<f_call>(decl.value_);
-    REQUIRE(call.name_ == "foo");
+    const f_call& call = std::get<f_call>(decl.value_.wrapped_);
+    REQUIRE(call.name_.value_ == "foo");
     REQUIRE(call.args_.size() == 3);
 
     REQUIRE(std::holds_alternative<int_scalar>(call.args_[0].wrapped_));
     REQUIRE(std::get<int_scalar>(call.args_[0].wrapped_).value_ == 1);
 
-    REQUIRE(std::holds_alternative<id>(call.args_[1].wrapped_));
-    REQUIRE(std::get<id>(call.args_[1].wrapped_) == "bar");
+    REQUIRE(std::holds_alternative<identifier>(call.args_[1].wrapped_));
+    REQUIRE(std::get<identifier>(call.args_[1].wrapped_).value_ == "bar");
 
     REQUIRE(std::holds_alternative<float_scalar>(call.args_[2].wrapped_));
     REQUIRE(std::get<float_scalar>(call.args_[2].wrapped_).value_ == 3.0);
@@ -88,8 +89,8 @@ float[] float_arr = [1.0, 2.0, .5]
 
     const declaration& decl0 = prog.declarations_[0];
     REQUIRE(decl0.type_ == type::int_array);
-    REQUIRE(std::holds_alternative<array_construction>(decl0.value_));
-    const array_construction& arr0 = std::get<array_construction>(decl0.value_);
+    REQUIRE(std::holds_alternative<array_construction>(decl0.value_.wrapped_));
+    const array_construction& arr0 = std::get<array_construction>(decl0.value_.wrapped_);
     REQUIRE(arr0.elements_.size() == 3);
     REQUIRE(std::holds_alternative<int_scalar>(arr0.elements_[0].wrapped_));
     REQUIRE(std::get<int_scalar>(arr0.elements_[0].wrapped_).value_ == 1);
@@ -98,8 +99,8 @@ float[] float_arr = [1.0, 2.0, .5]
 
     const declaration& decl1 = prog.declarations_[1];
     REQUIRE(decl1.type_ == type::float_array);
-    REQUIRE(std::holds_alternative<array_construction>(decl1.value_));
-    const array_construction& arr1 = std::get<array_construction>(decl1.value_);
+    REQUIRE(std::holds_alternative<array_construction>(decl1.value_.wrapped_));
+    const array_construction& arr1 = std::get<array_construction>(decl1.value_.wrapped_);
     REQUIRE(arr1.elements_.size() == 3);
     REQUIRE(std::holds_alternative<float_scalar>(arr1.elements_[0].wrapped_));
     REQUIRE(std::get<float_scalar>(arr1.elements_[0].wrapped_).value_ == 1.0);
@@ -138,12 +139,12 @@ TEST_CASE("Nested function calls in arguments", "[valid]")
 
     const declaration& decl = prog.declarations_[0];
     REQUIRE(decl.type_ == type::int_scalar);
-    REQUIRE(decl.name_ == "result");
+    REQUIRE(decl.name_.value_ == "result");
 
-    REQUIRE(std::holds_alternative<f_call>(decl.value_));
-    const f_call& outer = std::get<f_call>(decl.value_);
+    REQUIRE(std::holds_alternative<f_call>(decl.value_.wrapped_));
+    const f_call& outer = std::get<f_call>(decl.value_.wrapped_);
 
-    REQUIRE(outer.name_ == "foo");
+    REQUIRE(outer.name_.value_ == "foo");
     REQUIRE(outer.args_.size() == 3);
 
     REQUIRE(std::holds_alternative<int_scalar>(outer.args_[0].wrapped_));
@@ -151,7 +152,7 @@ TEST_CASE("Nested function calls in arguments", "[valid]")
 
     REQUIRE(std::holds_alternative<f_call>(outer.args_[1].wrapped_));
     const f_call& inner = std::get<f_call>(outer.args_[1].wrapped_);
-    REQUIRE(inner.name_ == "bar");
+    REQUIRE(inner.name_.value_ == "bar");
     REQUIRE(inner.args_.size() == 2);
 
     REQUIRE(std::holds_alternative<int_scalar>(inner.args_[0].wrapped_));
@@ -160,8 +161,8 @@ TEST_CASE("Nested function calls in arguments", "[valid]")
     REQUIRE(std::holds_alternative<float_scalar>(inner.args_[1].wrapped_));
     REQUIRE(std::get<float_scalar>(inner.args_[1].wrapped_).value_ == 3.0);
 
-    REQUIRE(std::holds_alternative<id>(outer.args_[2].wrapped_));
-    REQUIRE(std::get<id>(outer.args_[2].wrapped_) == "baz");
+    REQUIRE(std::holds_alternative<identifier>(outer.args_[2].wrapped_));
+    REQUIRE(std::get<identifier>(outer.args_[2].wrapped_).value_ == "baz");
 }
 
 TEST_CASE("Array comprehension: basic single-variable with literal body", "[valid]")
@@ -181,14 +182,15 @@ int[] res = [|i| in |src| do 42]
 
     const declaration& decl = prog.declarations_[1];
     REQUIRE(decl.type_ == type::int_array);
-    REQUIRE(decl.name_ == "res");
-    REQUIRE(std::holds_alternative<comprehension>(decl.value_));
+    REQUIRE(decl.name_.value_ == "res");
+    REQUIRE(std::holds_alternative<comprehension>(decl.value_.wrapped_));
 
-    const comprehension& fc = std::get<comprehension>(decl.value_);
-    REQUIRE(fc.variables_ == std::vector<std::string>{"i"});
+    const comprehension& fc = std::get<comprehension>(decl.value_.wrapped_);
+    REQUIRE(fc.variables_.size() == 1);
+    REQUIRE(fc.variables_[0].value_ == "i");
     REQUIRE(fc.in_exprs_.size() == 1);
-    REQUIRE(std::holds_alternative<id>(fc.in_exprs_[0].wrapped_));
-    REQUIRE(std::get<id>(fc.in_exprs_[0].wrapped_) == "src");
+    REQUIRE(std::holds_alternative<identifier>(fc.in_exprs_[0].wrapped_));
+    REQUIRE(std::get<identifier>(fc.in_exprs_[0].wrapped_).value_ == "src");
 
     REQUIRE(std::holds_alternative<int_scalar>(fc.do_expr_->wrapped_));
     REQUIRE(std::get<int_scalar>(fc.do_expr_->wrapped_).value_ == 42);
@@ -212,25 +214,27 @@ float[] res = [|i, f| in |ints, floats| do foo(i, f)]
 
     const declaration& decl = prog.declarations_[2];
     REQUIRE(decl.type_ == type::float_array);
-    REQUIRE(decl.name_ == "res");
-    REQUIRE(std::holds_alternative<comprehension>(decl.value_));
+    REQUIRE(decl.name_.value_ == "res");
+    REQUIRE(std::holds_alternative<comprehension>(decl.value_.wrapped_));
 
-    const comprehension& fc = std::get<comprehension>(decl.value_);
-    REQUIRE(fc.variables_ == std::vector<std::string>{"i", "f"});
+    const comprehension& fc = std::get<comprehension>(decl.value_.wrapped_);
+    REQUIRE(fc.variables_.size() == 2);
+    REQUIRE(fc.variables_[0].value_ == "i");
+    REQUIRE(fc.variables_[1].value_ == "f");
     REQUIRE(fc.in_exprs_.size() == 2);
-    REQUIRE(std::holds_alternative<id>(fc.in_exprs_[0].wrapped_));
-    REQUIRE(std::get<id>(fc.in_exprs_[0].wrapped_) == "ints");
-    REQUIRE(std::holds_alternative<id>(fc.in_exprs_[1].wrapped_));
-    REQUIRE(std::get<id>(fc.in_exprs_[1].wrapped_) == "floats");
+    REQUIRE(std::holds_alternative<identifier>(fc.in_exprs_[0].wrapped_));
+    REQUIRE(std::get<identifier>(fc.in_exprs_[0].wrapped_).value_ == "ints");
+    REQUIRE(std::holds_alternative<identifier>(fc.in_exprs_[1].wrapped_));
+    REQUIRE(std::get<identifier>(fc.in_exprs_[1].wrapped_).value_ == "floats");
 
     REQUIRE(std::holds_alternative<f_call>(fc.do_expr_->wrapped_));
     const f_call& call = std::get<f_call>(fc.do_expr_->wrapped_);
-    REQUIRE(call.name_ == "foo");
+    REQUIRE(call.name_.value_ == "foo");
     REQUIRE(call.args_.size() == 2);
-    REQUIRE(std::holds_alternative<id>(call.args_[0].wrapped_));
-    REQUIRE(std::get<id>(call.args_[0].wrapped_) == "i");
-    REQUIRE(std::holds_alternative<id>(call.args_[1].wrapped_));
-    REQUIRE(std::get<id>(call.args_[1].wrapped_) == "f");
+    REQUIRE(std::holds_alternative<identifier>(call.args_[0].wrapped_));
+    REQUIRE(std::get<identifier>(call.args_[0].wrapped_).value_ == "i");
+    REQUIRE(std::holds_alternative<identifier>(call.args_[1].wrapped_));
+    REQUIRE(std::get<identifier>(call.args_[1].wrapped_).value_ == "f");
 }
 
 TEST_CASE("Array comprehension: mismatched variable/source counts", "[invalid]")
@@ -239,10 +243,8 @@ TEST_CASE("Array comprehension: mismatched variable/source counts", "[invalid]")
     p.parse("int[] res = [|x, y| in |src| do 42]");
 
     const auto& errors = p.get_errors();
-    REQUIRE_FALSE(errors.empty());
-    REQUIRE_THAT(errors[0], ContainsSubstring("Number of variables"));
-    REQUIRE_THAT(errors[0], ContainsSubstring("and source expressions"));
-    REQUIRE_THAT(errors[0], ContainsSubstring("must match"));
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 14]: Number of variables (2) and source expressions (1) must match in array comprehension");
 }
 
 TEST_CASE("Array comprehension: missing 'in' keyword", "[invalid]")
@@ -251,8 +253,8 @@ TEST_CASE("Array comprehension: missing 'in' keyword", "[invalid]")
     p.parse("int[] res = [|x| foo |src| do 42]");
 
     const auto& errors = p.get_errors();
-    REQUIRE_FALSE(errors.empty());
-    REQUIRE_THAT(errors[0], ContainsSubstring("Expected 'in' after variable list"));
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 14]: Expected 'in' after variable list in array comprehension");
 }
 
 TEST_CASE("Array comprehension: missing 'do' keyword", "[invalid]")
@@ -261,8 +263,8 @@ TEST_CASE("Array comprehension: missing 'do' keyword", "[invalid]")
     p.parse("int[] res = [|x| in |src| 42]");
 
     const auto& errors = p.get_errors();
-    REQUIRE_FALSE(errors.empty());
-    REQUIRE_THAT(errors[0], ContainsSubstring("Expected 'do' after source list"));
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 14]: Expected 'do' after source list in array comprehension");
 }
 
 TEST_CASE("Array comprehension: no variables", "[invalid]")
@@ -271,8 +273,8 @@ TEST_CASE("Array comprehension: no variables", "[invalid]")
     p.parse("int[] res = [|| in |src| do 42]");
 
     const auto& errors = p.get_errors();
-    REQUIRE_FALSE(errors.empty());
-    REQUIRE_THAT(errors[0], ContainsSubstring("must have at least one variable"));
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 14]: Array comprehension must have at least one variable");
 }
 
 TEST_CASE("Extra characters after expression", "[invalid]")
@@ -282,7 +284,7 @@ TEST_CASE("Extra characters after expression", "[invalid]")
 
     const auto& errors = p.get_errors();
     REQUIRE(errors.size() == 1);
-    REQUIRE_THAT(errors[0], ContainsSubstring("Extra characters after expression"));
+    REQUIRE(errors[0] == "Error [1, 12]: Extra characters after expression");
 }
 
 TEST_CASE("Unexpected token (unknown type)", "[invalid]")
@@ -292,7 +294,7 @@ TEST_CASE("Unexpected token (unknown type)", "[invalid]")
 
     const auto& errors = p.get_errors();
     REQUIRE(errors.size() == 1);
-    REQUIRE_THAT(errors[0], ContainsSubstring("Unknown type"));
+    REQUIRE(errors[0] == "Error [1, 1]: Unknown type 'unknown_type'; expected 'int' or 'float'");
 }
 
 TEST_CASE("Array indexing on identifier", "[valid]")
@@ -312,15 +314,15 @@ float x = arr[idx]
 
     const declaration& decl = prog.declarations_[2];
     REQUIRE(decl.type_ == type::float_scalar);
-    REQUIRE(std::holds_alternative<index_access>(decl.value_));
+    REQUIRE(std::holds_alternative<index_access>(decl.value_.wrapped_));
 
-    const index_access& ia = std::get<index_access>(decl.value_);
+    const index_access& ia = std::get<index_access>(decl.value_.wrapped_);
 
-    REQUIRE(std::holds_alternative<id>(ia.base_->wrapped_));
-    REQUIRE(std::get<id>(ia.base_->wrapped_) == "arr");
+    REQUIRE(std::holds_alternative<identifier>(ia.base_->wrapped_));
+    REQUIRE(std::get<identifier>(ia.base_->wrapped_).value_ == "arr");
 
-    REQUIRE(std::holds_alternative<id>(ia.index_->wrapped_));
-    REQUIRE(std::get<id>(ia.index_->wrapped_) == "idx");
+    REQUIRE(std::holds_alternative<identifier>(ia.index_->wrapped_));
+    REQUIRE(std::get<identifier>(ia.index_->wrapped_).value_ == "idx");
 }
 
 TEST_CASE("Array indexing on function call", "[valid]")
@@ -335,14 +337,14 @@ TEST_CASE("Array indexing on function call", "[valid]")
     REQUIRE(prog.declarations_.size() == 1);
 
     const declaration& decl = prog.declarations_[0];
-    REQUIRE(std::holds_alternative<index_access>(decl.value_));
+    REQUIRE(std::holds_alternative<index_access>(decl.value_.wrapped_));
 
-    const index_access& ia = std::get<index_access>(decl.value_);
+    const index_access& ia = std::get<index_access>(decl.value_.wrapped_);
 
     REQUIRE(std::holds_alternative<f_call>(ia.base_->wrapped_));
     const f_call& call = std::get<f_call>(ia.base_->wrapped_);
 
-    REQUIRE(call.name_ == "foo");
+    REQUIRE(call.name_.value_ == "foo");
     REQUIRE(call.args_.size() == 2);
 }
 
@@ -358,9 +360,9 @@ TEST_CASE("Array indexing on construction", "[valid]")
     REQUIRE(prog.declarations_.size() == 1);
 
     const declaration& decl = prog.declarations_[0];
-    REQUIRE(std::holds_alternative<index_access>(decl.value_));
+    REQUIRE(std::holds_alternative<index_access>(decl.value_.wrapped_));
 
-    const index_access& ia = std::get<index_access>(decl.value_);
+    const index_access& ia = std::get<index_access>(decl.value_.wrapped_);
 
     REQUIRE(std::holds_alternative<array_construction>(ia.base_->wrapped_));
     const array_construction& arr = std::get<array_construction>(ia.base_->wrapped_);
@@ -369,7 +371,6 @@ TEST_CASE("Array indexing on construction", "[valid]")
     REQUIRE(std::holds_alternative<int_scalar>(ia.index_->wrapped_));
     REQUIRE(std::get<int_scalar>(ia.index_->wrapped_).value_ == 2);
 }
-
 
 TEST_CASE("Array comprehension: indexing on comprehension", "[valid]")
 {
@@ -388,17 +389,18 @@ int x = [|i| in |src| do i][1]
 
     const declaration& decl = prog.declarations_[1];
     REQUIRE(decl.type_ == type::int_scalar);
-    REQUIRE(std::holds_alternative<index_access>(decl.value_));
+    REQUIRE(std::holds_alternative<index_access>(decl.value_.wrapped_));
 
-    const index_access& ia = std::get<index_access>(decl.value_);
+    const index_access& ia = std::get<index_access>(decl.value_.wrapped_);
     REQUIRE(std::holds_alternative<comprehension>(ia.base_->wrapped_));
 
     const comprehension& fc = std::get<comprehension>(ia.base_->wrapped_);
-    REQUIRE(fc.variables_ == std::vector<std::string>{"i"});
-    REQUIRE(std::holds_alternative<id>(fc.in_exprs_[0].wrapped_));
-    REQUIRE(std::get<id>(fc.in_exprs_[0].wrapped_) == "src");
-    REQUIRE(std::holds_alternative<id>(fc.do_expr_->wrapped_));
-    REQUIRE(std::get<id>(fc.do_expr_->wrapped_) == "i");
+    REQUIRE(fc.variables_.size() == 1);
+    REQUIRE(fc.variables_[0].value_ == "i");
+    REQUIRE(std::holds_alternative<identifier>(fc.in_exprs_[0].wrapped_));
+    REQUIRE(std::get<identifier>(fc.in_exprs_[0].wrapped_).value_ == "src");
+    REQUIRE(std::holds_alternative<identifier>(fc.do_expr_->wrapped_));
+    REQUIRE(std::get<identifier>(fc.do_expr_->wrapped_).value_ == "i");
 
     REQUIRE(std::holds_alternative<int_scalar>(ia.index_->wrapped_));
     REQUIRE(std::get<int_scalar>(ia.index_->wrapped_).value_ == 1);
@@ -410,8 +412,8 @@ TEST_CASE("Chained indexing causes syntax error", "[invalid]")
     p.parse("int x = arr[0][1]");
 
     const auto& errors = p.get_errors();
-    REQUIRE_FALSE(errors.empty());
-    REQUIRE_THAT(errors[0], ContainsSubstring("Extra characters after expression"));
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 15]: Extra characters after expression");
 }
 
 TEST_CASE("Missing closing bracket in index", "[invalid]")
@@ -420,6 +422,6 @@ TEST_CASE("Missing closing bracket in index", "[invalid]")
     p.parse("int x = arr[0");
 
     const auto& errors = p.get_errors();
-    REQUIRE_FALSE(errors.empty());
-    REQUIRE_THAT(errors[0], ContainsSubstring("Expected ']' after index expression"));
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 14]: Expected ']' after index expression");
 }

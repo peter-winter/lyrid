@@ -1,14 +1,12 @@
+// tests/test_semantics.cpp
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
-
-using Catch::Matchers::ContainsSubstring;
 
 #include "parser.hpp"
 #include "ast.hpp"
 #include "semantic_analyzer.hpp"
 
 using namespace lyrid;
-
 
 TEST_CASE("Semantic error: non-integer array index", "[semantic]")
 {
@@ -27,8 +25,8 @@ int x = arr[idx]
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors.back(), ContainsSubstring("Array index must be of type 'int', but got 'float'"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [4, 13]: Array index must be of type 'int', but got 'float'");
 }
 
 TEST_CASE("Semantic error: mixed types in array construction", "[semantic]")
@@ -44,8 +42,8 @@ TEST_CASE("Semantic error: mixed types in array construction", "[semantic]")
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors[0], ContainsSubstring("Type mismatch in array construction"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [1, 17]: Type mismatch in array construction: expected 'int' but got 'float'");
 }
 
 TEST_CASE("Semantic error: nested array in construction", "[semantic]")
@@ -64,12 +62,9 @@ int[] outer = [inner]
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors.back(), ContainsSubstring("Array construction elements must be scalar types"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [3, 16]: Array construction elements must be scalar types, but got 'int[]'");
 }
-
-// tests/test_semantics.cpp
-// Replace all existing array comprehension-related TEST_CASE blocks with the following updated versions
 
 TEST_CASE("Semantic valid: basic array comprehension with literal body", "[semantic]")
 {
@@ -124,8 +119,8 @@ int[] res = [|i| in |scalar_val| do i]
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors.back(), ContainsSubstring("Source in array comprehension must be an array type"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [3, 22]: Source in array comprehension must be an array type, got 'int'");
 }
 
 TEST_CASE("Semantic error: 'do' expression is not scalar", "[semantic]")
@@ -145,8 +140,8 @@ int[] res = [|i| in |src| do inner]
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors.back(), ContainsSubstring("'do' expression in array comprehension must be a scalar type"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [4, 30]: 'do' expression in array comprehension must be a scalar type, got 'int[]'");
 }
 
 TEST_CASE("Semantic error: duplicate variable names in comprehension", "[semantic]")
@@ -166,8 +161,8 @@ int[] res = [|x, x| in |src1, src2| do x]
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors.back(), ContainsSubstring("Duplicate variable"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [4, 18]: Duplicate variable 'x' in array comprehension");
 }
 
 TEST_CASE("Semantic error: comprehension infers mismatched array element type", "[semantic]")
@@ -186,9 +181,8 @@ float[] res = [|i| in |src| do 42]
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors.back(), ContainsSubstring("Type mismatch in declaration"));
-    REQUIRE_THAT(sem_errors.back(), ContainsSubstring("declared as 'float[]' but expression has type 'int[]'"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [3, 15]: Type mismatch in declaration of 'res': declared as 'float[]' but expression has type 'int[]'");
 }
 
 TEST_CASE("Semantic valid: simple function call with registered prototype", "[semantic]")
@@ -283,13 +277,12 @@ int x = unknown_func(42)
     REQUIRE(parse_errors.empty());
 
     semantic_analyzer sa;
-    // No prototype registered
     sa.analyze(p.get_program());
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors[0], ContainsSubstring("Call to undefined function 'unknown_func'"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [2, 9]: Call to undefined function 'unknown_func'");
 }
 
 TEST_CASE("Semantic error: incorrect number of arguments in call", "[semantic]")
@@ -309,9 +302,8 @@ int x = foo(1, 2.0)
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors[0], ContainsSubstring("Incorrect number of arguments"));
-    REQUIRE_THAT(sem_errors[0], ContainsSubstring("expected 1 but provided 2"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [2, 9]: Incorrect number of arguments in call to 'foo': expected 1 but provided 2");
 }
 
 TEST_CASE("Semantic error: argument type mismatch with named parameter in error", "[semantic]")
@@ -331,9 +323,8 @@ float x = foo(1.0)
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors[0], ContainsSubstring("Type mismatch for 'value'"));
-    REQUIRE_THAT(sem_errors[0], ContainsSubstring("expected 'int' but got 'float'"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [2, 15]: Type mismatch for 'value' in call to 'foo': expected 'int' but got 'float'");
 }
 
 TEST_CASE("Semantic error: return type mismatch in declaration", "[semantic]")
@@ -353,7 +344,6 @@ float x = foo()
 
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
-    REQUIRE_FALSE(sem_errors.empty());
-    REQUIRE_THAT(sem_errors[0], ContainsSubstring("Type mismatch in declaration"));
-    REQUIRE_THAT(sem_errors[0], ContainsSubstring("declared as 'float' but expression has type 'int'"));
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [2, 11]: Type mismatch in declaration of 'x': declared as 'float' but expression has type 'int'");
 }
