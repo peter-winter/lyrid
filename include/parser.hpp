@@ -20,7 +20,8 @@ public:
     const std::vector<std::string>& get_errors() const;
 
     const ast::program& get_program() const;
-
+    ast::program& get_program();
+    
 private:
     std::string input_;
     size_t pos_ = 0;

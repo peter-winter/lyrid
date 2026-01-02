@@ -21,6 +21,11 @@ const program& parser::get_program() const
     return prog_;
 }
 
+ast::program& parser::get_program()
+{
+    return prog_;
+}
+
 void parser::parse(const std::string& source)
 {
     input_ = source;
@@ -657,7 +662,7 @@ std::optional<expr_wrapper> parser::try_parse_index_access(expr_wrapper&& base)
         return {};
     }
 
-    source_location whole_loc{base.loc.line_, base.loc.column_};
+    source_location whole_loc{base.loc_.line_, base.loc_.column_};
 
     index_access acc{
         std::make_unique<expr_wrapper>(std::move(base)),

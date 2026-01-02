@@ -43,20 +43,20 @@ std::string semantic_analyzer::type_to_string(type t) const
 }
 
 std::optional<type> semantic_analyzer::infer_expression_type(
-    const expr_wrapper& wrapper,
+    expr_wrapper& wrapper,
     const std::map<std::string, type>& symbols)
 {
     return std::visit(overloaded
     {
-        [&](const int_scalar&) -> std::optional<type>
+        [&](int_scalar&) -> std::optional<type>
         {
-            return type::int_scalar;
+            return wrapper.inferred_type_ = type::int_scalar;
         },
-        [&](const float_scalar&) -> std::optional<type>
+        [&](float_scalar&) -> std::optional<type>
         {
-            return type::float_scalar;
+            return wrapper.inferred_type_ = type::float_scalar;
         },
-        [&](const identifier& i) -> std::optional<type>
+        [&](identifier& i) -> std::optional<type>
         {
             auto it = symbols.find(i.value_);
             if (it == symbols.end())
@@ -64,9 +64,9 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                 error(i.loc_, "Undefined variable '" + i.value_ + "'");
                 return {};
             }
-            return it->second;
+            return wrapper.inferred_type_ = it->second;
         },
-        [&](const f_call& call) -> std::optional<type>
+        [&](f_call& call) -> std::optional<type>
         {
             auto fit = functions_.find(call.name_.value_);
             if (fit == functions_.end())
@@ -77,11 +77,11 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             const prototype& proto = fit->second;
 
-            if (call.args_.size() != proto.arg_types.size())
+            if (call.args_.size() != proto.arg_types_.size())
             {
-                error(wrapper.loc,
+                error(wrapper.loc_,
                       "Incorrect number of arguments in call to '" + call.name_.value_ +
-                      "': expected " + std::to_string(proto.arg_types.size()) +
+                      "': expected " + std::to_string(proto.arg_types_.size()) +
                       " but provided " + std::to_string(call.args_.size()));
                 return {};
             }
@@ -94,23 +94,22 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                     return {};
                 }
 
-                if (*arg_type != proto.arg_types[i])
+                if (*arg_type != proto.arg_types_[i])
                 {
-                    std::string arg_name = proto.arg_names[i].empty()
+                    std::string arg_name = proto.arg_names_[i].empty()
                         ? "argument " + std::to_string(i + 1)
-                        : "'" + proto.arg_names[i] + "'";
+                        : "'" + proto.arg_names_[i] + "'";
 
-                    error(call.args_[i].loc,
+                    error(call.args_[i].loc_,
                           "Type mismatch for " + arg_name + " in call to '" + call.name_.value_ +
-                          "': expected '" + type_to_string(proto.arg_types[i]) +
+                          "': expected '" + type_to_string(proto.arg_types_[i]) +
                           "' but got '" + type_to_string(*arg_type) + "'");
                     return {};
                 }
             }
-
-            return proto.return_type;
+            return wrapper.inferred_type_ = proto.return_type_;
         },
-        [&](const index_access& acc) -> std::optional<type>
+        [&](index_access& acc) -> std::optional<type>
         {
             std::optional<type> base_type = infer_expression_type(*acc.base_, symbols);
 
@@ -131,8 +130,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
             }
             else
             {
-                error(acc.base_->loc,
-                      "Indexing applied to non-array type '" + type_to_string(*base_type) + "'");
+                error(acc.base_->loc_, "Indexing applied to non-array type '" + type_to_string(*base_type) + "'");
                 return {};
             }
 
@@ -145,24 +143,23 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             if (*index_type != type::int_scalar)
             {
-                error(acc.index_->loc,
-                      "Array index must be of type 'int', but got '" + type_to_string(*index_type) + "'");
+                error(acc.index_->loc_, "Array index must be of type 'int', but got '" + type_to_string(*index_type) + "'");
                 return {};
             }
 
-            return element_type;
+            return wrapper.inferred_type_ = element_type;
         },
-        [&](const array_construction& ac) -> std::optional<type>
+        [&](array_construction& ac) -> std::optional<type>
         {
             if (ac.elements_.empty())
             {
-                error(wrapper.loc, "Empty array construction is not allowed");
+                error(wrapper.loc_, "Empty array construction is not allowed");
                 return {};
             }
 
             std::optional<type> elem_type;
 
-            for (const auto& elem : ac.elements_)
+            for (auto& elem : ac.elements_)
             {
                 std::optional<type> t_opt = infer_expression_type(elem, symbols);
 
@@ -175,8 +172,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
                 if (t != type::int_scalar && t != type::float_scalar)
                 {
-                    error(elem.loc,
-                          "Array construction elements must be scalar types, but got '" + type_to_string(t) + "'");
+                    error(elem.loc_, "Array construction elements must be scalar types, but got '" + type_to_string(t) + "'");
                     return {};
                 }
 
@@ -186,27 +182,27 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                 }
                 else if (t != *elem_type)
                 {
-                    error(elem.loc,
+                    error(elem.loc_,
                           "Type mismatch in array construction: expected '" + type_to_string(*elem_type) +
                           "' but got '" + type_to_string(t) + "'");
                     return {};
                 }
             }
 
-            return (*elem_type == type::int_scalar) ? type::int_array : type::float_array;
+            return wrapper.inferred_type_ = ((*elem_type == type::int_scalar) ? type::int_array : type::float_array);
         },
-        [&](const comprehension& fc) -> std::optional<type>
+        [&](comprehension& fc) -> std::optional<type>
         {
             size_t n = fc.variables_.size();
 
             if (n == 0 || n != fc.in_exprs_.size())
             {
-                error(wrapper.loc, "Invalid array comprehension (mismatched variables/sources)");
+                error(wrapper.loc_, "Invalid array comprehension (mismatched variables/sources)");
                 return {};
             }
 
             std::vector<type> elem_types;
-            for (const auto& src : fc.in_exprs_)
+            for (auto& src : fc.in_exprs_)
             {
                 std::optional<type> src_type = infer_expression_type(src, symbols);
                 if (!src_type) return {};
@@ -222,7 +218,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                 }
                 else
                 {
-                    error(src.loc,
+                    error(src.loc_,
                           "Source in array comprehension must be an array type, got '" +
                           type_to_string(*src_type) + "'");
                     return {};
@@ -255,23 +251,23 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             if (*body_type != type::int_scalar && *body_type != type::float_scalar)
             {
-                error(fc.do_expr_->loc,
+                error(fc.do_expr_->loc_,
                       "'do' expression in array comprehension must be a scalar type, got '" +
                       type_to_string(*body_type) + "'");
                 return {};
             }
 
-            return (*body_type == type::int_scalar) ? type::int_array : type::float_array;
+            return wrapper.inferred_type_ = ((*body_type == type::int_scalar) ? type::int_array : type::float_array);
         },
     }, wrapper.wrapped_);
 }
 
-void semantic_analyzer::analyze(const program& prog)
+void semantic_analyzer::analyze(program& prog)
 {
     errors_.clear();
     symbols_.clear();
 
-    for (const auto& decl : prog.declarations_)
+    for (auto& decl : prog.declarations_)
     {
         if (symbols_.contains(decl.name_.value_))
         {
@@ -282,7 +278,7 @@ void semantic_analyzer::analyze(const program& prog)
 
         if (expr_type && *expr_type != decl.type_)
         {
-            error(decl.value_.loc,
+            error(decl.value_.loc_,
                   "Type mismatch in declaration of '" + decl.name_.value_ +
                   "': declared as '" + type_to_string(decl.type_) +
                   "' but expression has type '" + type_to_string(*expr_type) + "'");

@@ -17,9 +17,9 @@ class semantic_analyzer
 public:
     struct prototype
     {
-        std::vector<type> arg_types;
-        std::vector<std::string> arg_names;
-        type return_type;
+        std::vector<type> arg_types_;
+        std::vector<std::string> arg_names_;
+        type return_type_;
     };
 
     void register_function_prototype(
@@ -28,7 +28,7 @@ public:
         std::vector<std::string> arg_names,
         type return_type);
 
-    void analyze(const ast::program& prog);
+    void analyze(ast::program& prog);
 
     bool is_valid() const { return errors_.empty(); }
 
@@ -41,7 +41,7 @@ private:
 
     void error(const ast::source_location& loc, const std::string& message);
     
-    std::optional<type> infer_expression_type(const ast::expr_wrapper& wrapper, const std::map<std::string, type>& symbols);
+    std::optional<type> infer_expression_type(ast::expr_wrapper& wrapper, const std::map<std::string, type>& symbols);
 
     std::map<std::string, prototype> functions_;
     std::vector<std::string> errors_;

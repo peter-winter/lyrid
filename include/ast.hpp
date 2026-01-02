@@ -1,4 +1,3 @@
-// Updated include/ast.hpp
 #pragma once
 
 #include <variant>
@@ -6,6 +5,7 @@
 #include <string>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 #include "type.hpp"
 
@@ -78,10 +78,11 @@ using expr = std::variant<
 struct expr_wrapper
 {
     expr wrapped_;
-    source_location loc;
+    source_location loc_;
+    std::optional<type> inferred_type_;
 
     expr_wrapper(expr e, source_location l)
-        : wrapped_(std::move(e)), loc(std::move(l)) {}
+        : wrapped_(std::move(e)), loc_(std::move(l)) {}
 };
 
 struct declaration
@@ -89,7 +90,7 @@ struct declaration
     type type_;
     identifier name_;
     expr_wrapper value_;
-    source_location loc;
+    source_location loc_;
 };
 
 struct program
