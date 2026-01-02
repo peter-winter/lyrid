@@ -25,12 +25,13 @@ void translator::compute_constant_pool_sizes(const ast::program& prog)
             [&](const ast::array_construction& ac) -> void
             {
                 for (const auto& e : ac.elements_)
-                    self(self, e); },
+                    self(self, e); 
+            },
             [&](const ast::comprehension& comp) -> void
             {
                 for (const auto& i : comp.in_exprs_)
                     self(self, i); 
-                    self(self, *comp.do_expr_);
+                self(self, *comp.do_expr_);
             },
             [&](const ast::int_scalar&) -> void
             {
@@ -54,13 +55,6 @@ void translator::hoist_scalar_constants(ast::program& prog)
 {
     const_int_memory_.reserve(const_int_memory_size_);
     const_float_memory_.reserve(const_float_memory_size_);
-
-    auto hoist_scalar = [](auto& memory, auto& index_vector, auto scalar_value)
-    {
-        size_t idx = memory.size();
-        memory.push_back(scalar_value);
-        index_vector.push_back(idx);
-    };
 
     auto get_start_offset = [this](type arr_type)
     {
@@ -101,13 +95,13 @@ void translator::hoist_scalar_constants(ast::program& prog)
         {
             [&](ast::int_scalar& s) -> std::optional<size_t>
             {
-                hoist_scalar(const_int_memory_, int_scalars_, s.value_);
+                const_int_memory_.push_back(s.value_);
                 s.const_memory_idx_ = const_int_memory_.size() - 1;
                 return 1;
             },
             [&](ast::float_scalar& s) -> std::optional<size_t>
             {
-                hoist_scalar(const_float_memory_, float_scalars_, s.value_);
+                const_float_memory_.push_back(s.value_);
                 s.const_memory_idx_ = const_float_memory_.size() - 1;
                 return 1;
             },
@@ -175,8 +169,6 @@ void translator::translate(const std::string& source)
     errors_.clear();
     const_int_memory_.clear();
     const_float_memory_.clear();
-    int_scalars_.clear();
-    float_scalars_.clear();
     const_int_array_spans_.clear();
     const_float_array_spans_.clear();
     const_int_memory_size_ = 0;

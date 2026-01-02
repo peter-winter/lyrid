@@ -21,7 +21,7 @@ struct x
 2. Snake casing
 
 ```
-indentifier_are_like_this
+indentifiers_are_like_this
 ```
 
 3. Suffix _ in data member names
@@ -52,6 +52,17 @@ if (expr)
 
 for (int i = 0; i < n; ++i)
     do_stuff();
+
+// also acceptable
+if (expr)
+{
+    do_stuff();
+}
+        
+for (int i = 0; i < n; ++i)
+{
+    do_stuff();
+}
     
 // incorrect 
 if (expr) do_stuff();

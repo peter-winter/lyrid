@@ -32,15 +32,11 @@ public:
 
     using const_int_memory = std::vector<int64_t>;
     using const_float_memory = std::vector<double>;
-    using indices = std::vector<size_t>;
     using const_int_spans = std::vector<std::span<const int64_t>>;
     using const_float_spans = std::vector<std::span<const double>>;
     
     const const_int_memory& get_const_int_memory() const { return const_int_memory_; }
     const const_float_memory& get_const_float_memory() const { return const_float_memory_; }
-
-    const indices& get_int_scalars() const { return int_scalars_; }
-    const indices& get_float_scalars() const { return float_scalars_; }
 
     const const_int_spans& get_const_int_array_spans() const { return const_int_array_spans_; }
     const const_float_spans& get_const_float_array_spans() const { return const_float_array_spans_; }
@@ -65,11 +61,8 @@ private:
     const_int_memory const_int_memory_;
     const_float_memory const_float_memory_;
 
-    indices int_scalars_;
-    indices float_scalars_;
-
     const_int_spans const_int_array_spans_;
     const_float_spans const_float_array_spans_;
 };
 
-}   
+}

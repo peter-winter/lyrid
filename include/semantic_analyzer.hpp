@@ -39,10 +39,6 @@ private:
 
     void error(const ast::source_location& loc, const std::string& message);
     
-    std::optional<type> analyze_expr(
-        ast::expr_wrapper& wrapper,
-        const std::map<std::string, scope_entry>& current_scope);
-
     std::vector<prototype> prototypes_;
     std::map<std::string, size_t> prototype_map_;
 
