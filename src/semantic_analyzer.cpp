@@ -27,7 +27,9 @@ void semantic_analyzer::register_function_prototype(
             "Number of argument types and names must match for function prototype '" + name + "'");
     }
 
-    functions_[name] = { std::move(arg_types), std::move(arg_names), return_type };
+    prototype proto{std::move(arg_types), std::move(arg_names), return_type};
+    prototypes_.push_back(std::move(proto));
+    prototype_map_[name] = prototypes_.size() - 1;
 }
 
 std::string semantic_analyzer::type_to_string(type t) const
@@ -44,7 +46,7 @@ std::string semantic_analyzer::type_to_string(type t) const
 
 std::optional<type> semantic_analyzer::infer_expression_type(
     expr_wrapper& wrapper,
-    const std::map<std::string, type>& symbols)
+    const std::map<std::string, scope_entry>& current_scope)
 {
     return std::visit(overloaded
     {
@@ -56,31 +58,35 @@ std::optional<type> semantic_analyzer::infer_expression_type(
         {
             return wrapper.inferred_type_ = type::float_scalar;
         },
-        [&](identifier& i) -> std::optional<type>
+        [&](symbol_ref& sr) -> std::optional<type>
         {
-            auto it = symbols.find(i.value_);
-            if (it == symbols.end())
+            const std::string& name = sr.ident_.value_;
+            auto it = current_scope.find(name);
+            if (it == current_scope.end())
             {
-                error(i.loc_, "Undefined variable '" + i.value_ + "'");
+                error(sr.ident_.loc_, "Undefined variable '" + name + "'");
                 return {};
             }
-            return wrapper.inferred_type_ = it->second;
+            const scope_entry& entry = it->second;
+            sr.declaration_idx_ = entry.decl_index_;
+            return wrapper.inferred_type_ = entry.var_type_;
         },
         [&](f_call& call) -> std::optional<type>
         {
-            auto fit = functions_.find(call.name_.value_);
-            if (fit == functions_.end())
+            const std::string& fname = call.name_.ident_.value_;
+            auto pit = prototype_map_.find(fname);
+            if (pit == prototype_map_.end())
             {
-                error(call.name_.loc_, "Call to undefined function '" + call.name_.value_ + "'");
+                error(call.name_.ident_.loc_, "Call to undefined function '" + fname + "'");
                 return {};
             }
-
-            const prototype& proto = fit->second;
+            call.name_.proto_idx_ = pit->second;
+            const prototype& proto = prototypes_[pit->second];
 
             if (call.args_.size() != proto.arg_types_.size())
             {
                 error(wrapper.loc_,
-                      "Incorrect number of arguments in call to '" + call.name_.value_ +
+                      "Incorrect number of arguments in call to '" + fname +
                       "': expected " + std::to_string(proto.arg_types_.size()) +
                       " but provided " + std::to_string(call.args_.size()));
                 return {};
@@ -88,7 +94,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             for (size_t i = 0; i < call.args_.size(); ++i)
             {
-                std::optional<type> arg_type = infer_expression_type(call.args_[i], symbols);
+                std::optional<type> arg_type = infer_expression_type(call.args_[i], current_scope);
                 if (!arg_type)
                 {
                     return {};
@@ -101,7 +107,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                         : "'" + proto.arg_names_[i] + "'";
 
                     error(call.args_[i].loc_,
-                          "Type mismatch for " + arg_name + " in call to '" + call.name_.value_ +
+                          "Type mismatch for " + arg_name + " in call to '" + fname +
                           "': expected '" + type_to_string(proto.arg_types_[i]) +
                           "' but got '" + type_to_string(*arg_type) + "'");
                     return {};
@@ -111,15 +117,13 @@ std::optional<type> semantic_analyzer::infer_expression_type(
         },
         [&](index_access& acc) -> std::optional<type>
         {
-            std::optional<type> base_type = infer_expression_type(*acc.base_, symbols);
-
+            std::optional<type> base_type = infer_expression_type(*acc.base_, current_scope);
             if (!base_type)
             {
                 return {};
             }
 
             type element_type;
-
             if (*base_type == type::int_array)
             {
                 element_type = type::int_scalar;
@@ -134,8 +138,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                 return {};
             }
 
-            std::optional<type> index_type = infer_expression_type(*acc.index_, symbols);
-
+            std::optional<type> index_type = infer_expression_type(*acc.index_, current_scope);
             if (!index_type)
             {
                 return {};
@@ -161,8 +164,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             for (auto& elem : ac.elements_)
             {
-                std::optional<type> t_opt = infer_expression_type(elem, symbols);
-
+                std::optional<type> t_opt = infer_expression_type(elem, current_scope);
                 if (!t_opt)
                 {
                     return {};
@@ -191,20 +193,20 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             return wrapper.inferred_type_ = ((*elem_type == type::int_scalar) ? type::int_array : type::float_array);
         },
-        [&](comprehension& fc) -> std::optional<type>
+        [&](comprehension& comp) -> std::optional<type>
         {
-            size_t n = fc.variables_.size();
+            size_t n = comp.variables_.size();
 
-            if (n == 0 || n != fc.in_exprs_.size())
+            if (n == 0 || n != comp.in_exprs_.size())
             {
                 error(wrapper.loc_, "Invalid array comprehension (mismatched variables/sources)");
                 return {};
             }
 
             std::vector<type> elem_types;
-            for (auto& src : fc.in_exprs_)
+            for (auto& src : comp.in_exprs_)
             {
-                std::optional<type> src_type = infer_expression_type(src, symbols);
+                std::optional<type> src_type = infer_expression_type(src, current_scope);
                 if (!src_type) return {};
 
                 type elem_t;
@@ -227,7 +229,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
             }
 
             std::set<std::string> seen;
-            for (const auto& v : fc.variables_)
+            for (const auto& v : comp.variables_)
             {
                 if (!seen.insert(v.value_).second)
                 {
@@ -236,22 +238,19 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                 }
             }
 
-            std::map<std::string, type> local_symbols;
+            auto comp_scope = current_scope;
             for (size_t i = 0; i < n; ++i)
             {
-                local_symbols[fc.variables_[i].value_] = elem_types[i];
+                comp_scope[comp.variables_[i].value_] = {std::nullopt, elem_types[i]};
             }
 
-            auto combined_symbols = symbols;
-            combined_symbols.insert(local_symbols.begin(), local_symbols.end());
-
-            std::optional<type> body_type = infer_expression_type(*fc.do_expr_, combined_symbols);
+            std::optional<type> body_type = infer_expression_type(*comp.do_expr_, comp_scope);
             if (!body_type) 
                 return {};
 
             if (*body_type != type::int_scalar && *body_type != type::float_scalar)
             {
-                error(fc.do_expr_->loc_,
+                error(comp.do_expr_->loc_,
                       "'do' expression in array comprehension must be a scalar type, got '" +
                       type_to_string(*body_type) + "'");
                 return {};
@@ -265,28 +264,31 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 void semantic_analyzer::analyze(program& prog)
 {
     errors_.clear();
-    symbols_.clear();
 
-    for (auto& decl : prog.declarations_)
+    std::map<std::string, scope_entry> scope;
+
+    for (size_t decl_idx = 0; decl_idx < prog.declarations_.size(); ++decl_idx)
     {
-        if (symbols_.contains(decl.name_.value_))
+        declaration& decl = prog.declarations_[decl_idx];
+        const std::string& name = decl.name_.value_;
+
+        if (scope.contains(name))
         {
-            error(decl.name_.loc_, "Redeclaration of variable '" + decl.name_.value_ + "'");
+            error(decl.name_.loc_, "Redeclaration of variable '" + name + "'");
         }
 
-        std::optional<type> expr_type = infer_expression_type(decl.value_, symbols_);
+        std::optional<type> expr_type = infer_expression_type(decl.value_, scope);
 
         if (expr_type && *expr_type != decl.type_)
         {
             error(decl.value_.loc_,
-                  "Type mismatch in declaration of '" + decl.name_.value_ +
+                  "Type mismatch in declaration of '" + name +
                   "': declared as '" + type_to_string(decl.type_) +
                   "' but expression has type '" + type_to_string(*expr_type) + "'");
         }
 
-        symbols_[decl.name_.value_] = decl.type_;
+        scope[name] = {decl_idx, decl.type_};
     }
 }
-
 
 }

@@ -27,11 +27,23 @@ struct identifier
     source_location loc_;
 };
 
+struct symbol_ref
+{
+    identifier ident_;
+    std::optional<size_t> declaration_idx_;
+};
+
+struct fun_ref
+{
+    identifier ident_;
+    std::optional<size_t> proto_idx_;
+};
+
 struct expr_wrapper;
 
 struct f_call
 {
-    identifier name_;
+    fun_ref name_;
     std::vector<expr_wrapper> args_;
 };
 
@@ -68,7 +80,7 @@ struct float_scalar
 using expr = std::variant<
     int_scalar,
     float_scalar,
-    identifier,
+    symbol_ref,
     f_call,
     index_access,
     array_construction,

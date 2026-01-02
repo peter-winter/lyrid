@@ -42,3 +42,18 @@ class y
 ```c++```
 
 4. Don't add unnecessary spaces
+
+5. No one-liners
+
+```c++```
+// correct
+if (expr)
+    do_stuff();
+
+for (int i = 0; i < n; ++i)
+    do_stuff();
+    
+// incorrect 
+if (expr) do_stuff();
+for (int i = 0; i < n; ++i) do_stuff();
+```c++```

@@ -34,18 +34,25 @@ public:
 
     const std::vector<std::string>& get_errors() const { return errors_; }
 
-    const std::map<std::string, type>& get_symbols() const { return symbols_; }
-
 private:
+    struct scope_entry
+    {
+        std::optional<size_t> decl_index_;
+        type var_type_;
+    };
+
     std::string type_to_string(type t) const;
 
     void error(const ast::source_location& loc, const std::string& message);
     
-    std::optional<type> infer_expression_type(ast::expr_wrapper& wrapper, const std::map<std::string, type>& symbols);
+    std::optional<type> infer_expression_type(
+        ast::expr_wrapper& wrapper,
+        const std::map<std::string, scope_entry>& current_scope);
 
-    std::map<std::string, prototype> functions_;
+    std::vector<prototype> prototypes_;
+    std::map<std::string, size_t> prototype_map_;
+
     std::vector<std::string> errors_;
-    std::map<std::string, type> symbols_;
 };
 
 }

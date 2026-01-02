@@ -630,11 +630,13 @@ std::optional<expr_wrapper> parser::parse_primary()
             }
 
             source_location call_loc{primary_start_line, primary_start_column};
-            f_call call{std::move(ident), std::move(*args_opt)};
+            fun_ref fname{std::move(ident), std::nullopt};
+            f_call call{std::move(fname), std::move(*args_opt)};
             return expr_wrapper(expr(std::move(call)), call_loc);
         }
 
-        return expr_wrapper(expr(std::move(ident)), ident.loc_);
+        symbol_ref sref{std::move(ident), std::nullopt};
+        return expr_wrapper(expr(std::move(sref)), ident.loc_);
     }
 
     return {};
