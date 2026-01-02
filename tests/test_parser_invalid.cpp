@@ -105,7 +105,17 @@ TEST_CASE("Missing = after identifier in declaration", "[parser][invalid]")
     REQUIRE(errors[0] == "Error [1, 7]: Expected '=' after identifier");
 }
 
-TEST_CASE("Float scalar - extra dot", "[parser][invalid]")
+TEST_CASE("Invalid number literal - just dot", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int x = .");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 9]: Invalid number literal: no digits");
+}
+
+TEST_CASE("Invalid float literal - extra dot", "[parser][invalid]")
 {
     parser p;
     p.parse("int x = .4.3");
@@ -115,7 +125,7 @@ TEST_CASE("Float scalar - extra dot", "[parser][invalid]")
     REQUIRE(errors[0] == "Error [1, 11]: Extra characters after expression");
 }
 
-TEST_CASE("Float scalar - two dots in a row", "[parser][invalid]")
+TEST_CASE("Invalid float literal - two dots in a row", "[parser][invalid]")
 {
     parser p;
     p.parse("float x = 1..2");
@@ -128,20 +138,148 @@ TEST_CASE("Float scalar - two dots in a row", "[parser][invalid]")
 TEST_CASE("Invalid integer literal: overflow", "[parser][invalid]")
 {
     parser p;
-    p.parse("int x = 999999999999999999999999999999999999999");
+    p.parse("int x = 9223372036854775808");     // 2^63
 
     const auto& errors = p.get_errors();
     REQUIRE(errors.size() == 1);
-    REQUIRE(errors[0].find("Invalid integer literal") != std::string::npos);
+    REQUIRE(errors[0] == "Error [1, 9]: Invalid integer literal");
 }
 
-TEST_CASE("Invalid float literal: overflow", "[parser][invalid]")
+TEST_CASE("Invalid integer literal: negative overflow", "[parser][invalid]")
 {
     parser p;
-    p.parse("int x = 999999999999999999999999999999999999999");
+    p.parse("int x = -9223372036854775809");     // -2^63
 
     const auto& errors = p.get_errors();
     REQUIRE(errors.size() == 1);
-    REQUIRE(errors[0].find("Invalid integer literal") != std::string::npos);
+    REQUIRE(errors[0] == "Error [1, 9]: Invalid integer literal");
 }
 
+TEST_CASE("Invalid scientific notation: missing exponent digits", "[parser][invalid]")
+{
+    parser p;
+    p.parse("float x = 1e");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 11]: Invalid number literal: exponent has no digits");
+}
+
+TEST_CASE("Invalid scientific notation: exponent with sign but no digits (positive)", "[parser][invalid]")
+{
+    parser p;
+    p.parse("float x = 1e+");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 11]: Invalid number literal: exponent has no digits");
+}
+
+TEST_CASE("Invalid scientific notation: exponent with sign but no digits (negative)", "[parser][invalid]")
+{
+    parser p;
+    p.parse("float x = 1.5e-");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 11]: Invalid number literal: exponent has no digits");
+}
+
+TEST_CASE("Invalid scientific notation: multiple exponents", "[parser][invalid]")
+{
+    parser p;
+    p.parse("float x = 1e2e3");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 14]: Extra characters after expression");
+}
+
+TEST_CASE("Invalid float literal: very large exponent", "[parser][invalid]")
+{
+    parser p;
+    p.parse("float x = 1.0e1000");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 11]: Invalid float literal");
+}
+
+TEST_CASE("Invalid float literal: very small exponent", "[parser][valid]")
+{
+    parser p;
+    p.parse("float x = 1e-400");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 11]: Invalid float literal");
+}
+
+TEST_CASE("Invalid declaration: missing type keyword, starts with literal (triggers generic error)", "[parser][invalid]")
+{
+    parser p;
+    p.parse("42 = x");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 1]: Invalid declaration");
+
+    const auto& prog = p.get_program();
+    REQUIRE(prog.declarations_.empty());
+}
+
+TEST_CASE("Invalid declaration: missing type keyword, starts with punctuation (triggers generic error)", "[parser][invalid]")
+{
+    parser p;
+    p.parse("= 42");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 1]: Invalid declaration");
+
+    const auto& prog = p.get_program();
+    REQUIRE(prog.declarations_.empty());
+}
+
+TEST_CASE("Parser recovery: skips malformed declaration line (generic error branch)", "[parser][invalid]")
+{
+    parser p;
+    p.parse(R"(
+42 = x
+int y = 10
+int z = 20
+)");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [2, 1]: Invalid declaration");
+
+    const auto& prog = p.get_program();
+    REQUIRE(prog.declarations_.empty());
+}
+
+TEST_CASE("Empty array literal is invalid", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int[] a = []");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 11]: Array construction cannot be empty; expected elements or a comprehension");
+
+    const auto& prog = p.get_program();
+    REQUIRE(prog.declarations_.empty());
+}
+
+TEST_CASE("Empty array literal with internal whitespace is invalid", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int[] a = [   ]");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.size() == 1);
+    REQUIRE(errors[0] == "Error [1, 11]: Array construction cannot be empty; expected elements or a comprehension");
+
+    const auto& prog = p.get_program();
+    REQUIRE(prog.declarations_.empty());
+}

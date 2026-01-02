@@ -2,6 +2,7 @@
 #include "utility.hpp"
 
 #include <cctype>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <memory>
@@ -196,9 +197,12 @@ std::optional<expr_wrapper> parser::parse_number()
     skip_horizontal_whitespace();
 
     char c = peek();
-    if (c == '\0') return {};
+    if (c == '\0')
+    {
+        return {};
+    }
 
-    if (!std::isdigit(static_cast<unsigned char>(c)) && c != '.')
+    if (!std::isdigit(static_cast<unsigned char>(c)) && c != '.' && c != '-')
     {
         return {};
     }
@@ -209,6 +213,11 @@ std::optional<expr_wrapper> parser::parse_number()
     std::string str;
     bool has_digit = false;
 
+    if (peek() == '-')
+    {
+        str += advance();
+    }
+    
     // Integer part: zero or more digits
     while (std::isdigit(peek()))
     {
@@ -230,14 +239,40 @@ std::optional<expr_wrapper> parser::parse_number()
         }
     }
 
+    source_location loc{start_line, start_column};
+    
     if (!has_digit)
     {
-        source_location loc{start_line, start_column};
         error(loc, "Invalid number literal: no digits");
         return {};
     }
 
-    source_location loc{start_line, start_column};
+    // Optional exponent part
+    char ec = peek();
+    if (ec == 'e' || ec == 'E')
+    {
+        str += advance();
+        is_float = true;
+
+        // Optional sign
+        char sc = peek();
+        if (sc == '+' || sc == '-')
+        {
+            str += advance();
+        }
+
+        // Exponent must have at least one digit
+        if (!std::isdigit(peek()))
+        {
+            error(loc, "Invalid number literal: exponent has no digits");
+            return {};
+        }
+
+        do
+        {
+            str += advance();
+        } while (std::isdigit(peek()));
+    }
 
     if (is_float)
     {
@@ -250,6 +285,13 @@ std::optional<expr_wrapper> parser::parse_number()
                 error(loc, "Invalid float literal");
                 return {};
             }
+            
+            if (!std::isfinite(val))
+            {
+                error(loc, "Invalid float literal");
+                return {};
+            }
+            
             return expr_wrapper(expr(float_scalar{val}), loc);
         }
         catch (...)

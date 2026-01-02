@@ -375,3 +375,106 @@ int[] res = [|i| in |a| do [|j| in |b| do foo(i, j)]]
     REQUIRE(std::holds_alternative<symbol_ref>(call.args_[1].wrapped_));
     REQUIRE(std::get<symbol_ref>(call.args_[1].wrapped_).ident_.value_ == "j");
 }
+
+TEST_CASE("Int literals - valid values", "[parser][valid]")
+{
+    parser p;
+    p.parse(R"(
+float a = 9223372036854775807
+float b = -9223372036854775808
+float c = -9
+float d = 92
+float e = 1000
+)");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.empty());
+
+    const program& prog = p.get_program();
+    REQUIRE(prog.declarations_.size() == 5);
+
+    auto check_int = [](const expr_wrapper& ew, int64_t expected)
+    {
+        REQUIRE(std::holds_alternative<int_scalar>(ew.wrapped_));
+        int64_t val = std::get<int_scalar>(ew.wrapped_).value_;
+        REQUIRE(val == expected);
+    };
+
+    check_int(prog.declarations_[0].value_, std::numeric_limits<int64_t>::max());   // 2^63-1
+    check_int(prog.declarations_[1].value_, std::numeric_limits<int64_t>::min());  // -2^63
+    check_int(prog.declarations_[2].value_, -9);
+    check_int(prog.declarations_[3].value_, 92);
+    check_int(prog.declarations_[4].value_, 1000);
+}
+
+TEST_CASE("Float literals - valid values", "[parser][valid]")
+{
+    parser p;
+    p.parse(R"(
+float a = 1e3
+float b = 1.23E+4
+float c = .5e-2
+float d = 5.E6
+float e = 123.e0
+float f = 0.0e+0
+float g = 1.2E-3
+float h = 1.7976931348623157e308
+float i = 1.0
+float j = -1.2
+float k = 34.5
+float l = .67
+float m = -1.2E-3
+)");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.empty());
+
+    const program& prog = p.get_program();
+    REQUIRE(prog.declarations_.size() == 13);
+
+    auto check_float = [](const expr_wrapper& ew, double expected)
+    {
+        REQUIRE(std::holds_alternative<float_scalar>(ew.wrapped_));
+        double val = std::get<float_scalar>(ew.wrapped_).value_;
+        REQUIRE(val == expected);
+    };
+
+    check_float(prog.declarations_[0].value_, 1000.0);
+    check_float(prog.declarations_[1].value_, 12300.0);
+    check_float(prog.declarations_[2].value_, 0.005);
+    check_float(prog.declarations_[3].value_, 5000000.0);
+    check_float(prog.declarations_[4].value_, 123.0);
+    check_float(prog.declarations_[5].value_, 0.0);
+    check_float(prog.declarations_[6].value_, 0.0012);
+    check_float(prog.declarations_[7].value_, 1.7976931348623157e308);
+    check_float(prog.declarations_[8].value_, 1.0);
+    check_float(prog.declarations_[9].value_, -1.2);
+    check_float(prog.declarations_[10].value_, 34.5);
+    check_float(prog.declarations_[11].value_, 0.67);
+    check_float(prog.declarations_[12].value_, -0.0012);
+}
+
+TEST_CASE("Array literals containing scientific notation floats", "[parser][valid]")
+{
+    parser p;
+    p.parse("float[] arr = [1e0, 2.5E1, .3e-2, 4.E+3]");
+
+    const auto& errors = p.get_errors();
+    REQUIRE(errors.empty());
+
+    const program& prog = p.get_program();
+    REQUIRE(prog.declarations_.size() == 1);
+
+    const declaration& decl = prog.declarations_[0];
+    REQUIRE(decl.type_ == type::float_array);
+    REQUIRE(std::holds_alternative<array_construction>(decl.value_.wrapped_));
+
+    const array_construction& arr = std::get<array_construction>(decl.value_.wrapped_);
+    REQUIRE(arr.elements_.size() == 4);
+
+    REQUIRE(std::get<float_scalar>(arr.elements_[0].wrapped_).value_ == 1.0);
+    REQUIRE(std::get<float_scalar>(arr.elements_[1].wrapped_).value_ == 25.0);
+    REQUIRE(std::get<float_scalar>(arr.elements_[2].wrapped_).value_ == 0.003);
+    REQUIRE(std::get<float_scalar>(arr.elements_[3].wrapped_).value_ == 4000.0);
+}
+
