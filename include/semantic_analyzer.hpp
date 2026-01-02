@@ -3,6 +3,7 @@
 #include "ast.hpp"
 #include "type.hpp"
 #include "utility.hpp"
+#include "prototype.hpp"
 
 #include <map>
 #include <optional>
@@ -15,13 +16,6 @@ namespace lyrid
 class semantic_analyzer
 {
 public:
-    struct prototype
-    {
-        std::vector<type> arg_types_;
-        std::vector<std::string> arg_names_;
-        type return_type_;
-    };
-
     void register_function_prototype(
         const std::string& name,
         std::vector<type> arg_types,
@@ -40,12 +34,12 @@ private:
         std::optional<size_t> decl_index_;
         type var_type_;
     };
-
+    
     std::string type_to_string(type t) const;
 
     void error(const ast::source_location& loc, const std::string& message);
     
-    std::optional<type> infer_expression_type(
+    std::optional<type> analyze_expr(
         ast::expr_wrapper& wrapper,
         const std::map<std::string, scope_entry>& current_scope);
 

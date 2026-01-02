@@ -44,7 +44,7 @@ std::string semantic_analyzer::type_to_string(type t) const
     return "unknown";
 }
 
-std::optional<type> semantic_analyzer::infer_expression_type(
+std::optional<type> semantic_analyzer::analyze_expr(
     expr_wrapper& wrapper,
     const std::map<std::string, scope_entry>& current_scope)
 {
@@ -94,7 +94,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             for (size_t i = 0; i < call.args_.size(); ++i)
             {
-                std::optional<type> arg_type = infer_expression_type(call.args_[i], current_scope);
+                std::optional<type> arg_type = analyze_expr(call.args_[i], current_scope);
                 if (!arg_type)
                 {
                     return {};
@@ -117,7 +117,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
         },
         [&](index_access& acc) -> std::optional<type>
         {
-            std::optional<type> base_type = infer_expression_type(*acc.base_, current_scope);
+            std::optional<type> base_type = analyze_expr(*acc.base_, current_scope);
             if (!base_type)
             {
                 return {};
@@ -138,7 +138,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                 return {};
             }
 
-            std::optional<type> index_type = infer_expression_type(*acc.index_, current_scope);
+            std::optional<type> index_type = analyze_expr(*acc.index_, current_scope);
             if (!index_type)
             {
                 return {};
@@ -164,7 +164,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
 
             for (auto& elem : ac.elements_)
             {
-                std::optional<type> t_opt = infer_expression_type(elem, current_scope);
+                std::optional<type> t_opt = analyze_expr(elem, current_scope);
                 if (!t_opt)
                 {
                     return {};
@@ -206,7 +206,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
             std::vector<type> elem_types;
             for (auto& src : comp.in_exprs_)
             {
-                std::optional<type> src_type = infer_expression_type(src, current_scope);
+                std::optional<type> src_type = analyze_expr(src, current_scope);
                 if (!src_type) return {};
 
                 type elem_t;
@@ -244,7 +244,7 @@ std::optional<type> semantic_analyzer::infer_expression_type(
                 comp_scope[comp.variables_[i].value_] = {std::nullopt, elem_types[i]};
             }
 
-            std::optional<type> body_type = infer_expression_type(*comp.do_expr_, comp_scope);
+            std::optional<type> body_type = analyze_expr(*comp.do_expr_, comp_scope);
             if (!body_type) 
                 return {};
 
@@ -277,7 +277,7 @@ void semantic_analyzer::analyze(program& prog)
             error(decl.name_.loc_, "Redeclaration of variable '" + name + "'");
         }
 
-        std::optional<type> expr_type = infer_expression_type(decl.value_, scope);
+        std::optional<type> expr_type = analyze_expr(decl.value_, scope);
 
         if (expr_type && *expr_type != decl.type_)
         {

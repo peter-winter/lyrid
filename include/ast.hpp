@@ -21,6 +21,8 @@ struct source_location
     size_t column_;
 };
 
+struct expr_wrapper;
+
 struct identifier
 {
     std::string value_;
@@ -39,8 +41,6 @@ struct fun_ref
     std::optional<size_t> proto_idx_;
 };
 
-struct expr_wrapper;
-
 struct f_call
 {
     fun_ref name_;
@@ -56,6 +56,7 @@ struct index_access
 struct array_construction
 {
     std::vector<expr_wrapper> elements_;
+    std::optional<size_t> const_memory_span_idx_;
 };
 
 struct comprehension
@@ -69,12 +70,14 @@ struct int_scalar
 {
     using value_type = int64_t;
     value_type value_;
+    std::optional<size_t> const_memory_idx_;
 };
 
 struct float_scalar
 {
     using value_type = double;
     value_type value_;
+    std::optional<size_t> const_memory_idx_;
 };
 
 using expr = std::variant<
