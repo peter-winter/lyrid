@@ -59,13 +59,9 @@ void translator::hoist_scalar_constants(ast::program& prog)
     auto get_start_offset = [this](type arr_type)
     {
         if (arr_type == type::int_array)
-        {
             return const_int_memory_.size();
-        }
         else
-        {
             return const_float_memory_.size();
-        }
     };
 
     auto add_span_generic = [](auto& memory, auto& spans, size_t offset, size_t len)
@@ -80,80 +76,66 @@ void translator::hoist_scalar_constants(ast::program& prog)
     auto add_span = [this, add_span_generic](type arr_type, size_t offset, size_t len)
     {
         if (arr_type == type::int_array)
-        {
             return add_span_generic(const_int_memory_, const_int_array_spans_, offset, len);
-        }
         else
-        {
             return add_span_generic(const_float_memory_, const_float_array_spans_, offset, len);
-        }
     };
 
-    auto hoist_visit = [&](auto&& self, ast::expr_wrapper& ew) -> std::optional<size_t>
+    auto hoist_visit = [&](auto&& self, ast::expr_wrapper& ew) -> bool
     {
         return std::visit(overloaded
         {
-            [&](ast::int_scalar& s) -> std::optional<size_t>
+            [&](ast::int_scalar& s) -> bool
             {
                 const_int_memory_.push_back(s.value_);
                 s.const_memory_idx_ = const_int_memory_.size() - 1;
-                return 1;
+                return true;
             },
-            [&](ast::float_scalar& s) -> std::optional<size_t>
+            [&](ast::float_scalar& s) -> bool
             {
                 const_float_memory_.push_back(s.value_);
                 s.const_memory_idx_ = const_float_memory_.size() - 1;
-                return 1;
+                return true;
             },
-            [&](ast::array_construction& ac) -> std::optional<size_t>
+            [&](ast::array_construction& ac) -> bool
             {
                 type arr_type = ew.inferred_type_.value();
-
                 size_t start_offset = get_start_offset(arr_type);
-
-                size_t total_count = 0;
                 bool valid = true;
 
                 for (auto& e : ac.elements_)
+                    valid = self(self, e) && valid;
+                
+                if (valid)
                 {
-                    auto child_count = self(self, e);
-                    if (child_count.has_value())
-                        total_count += *child_count;
-                    else
-                        valid = false;
-                }
-
-                if (valid && total_count > 0)
-                {
-                    size_t span_idx = add_span(arr_type, start_offset, total_count);
+                    size_t span_idx = add_span(arr_type, start_offset, ac.elements_.size());
                     ac.const_memory_span_idx_ = span_idx;
-                    return total_count;
                 }
 
-                return {};
+                return false;
             },
-            [&](ast::f_call& call) -> std::optional<size_t>
+            [&](ast::f_call& call) -> bool
             {
                 for (auto& a : call.args_)
                     self(self, a);
-                return {};
+                return false;
             },
-            [&](ast::index_access& ia) -> std::optional<size_t>
+            [&](ast::index_access& ia) -> bool
             {
                 self(self, *ia.base_);
                 self(self, *ia.index_);
-                return {};
+                return false;
             },
-            [&](ast::comprehension& comp) -> std::optional<size_t>
+            [&](ast::comprehension& comp) -> bool
             {
                 for (auto& i : comp.in_exprs_)
                     self(self, i);
                 self(self, *comp.do_expr_);
-                return {};
+                return false;
             },
-            [&](ast::symbol_ref&) -> std::optional<size_t>
+            [&](ast::symbol_ref&) -> bool
             {
-                return {};
+                return false;
             }
         }, ew.wrapped_);
     };
