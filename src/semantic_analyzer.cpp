@@ -81,14 +81,14 @@ void semantic_analyzer::analyze(program& prog)
             },
             [this, &wrapper, &current_scope, &self](f_call& call) -> std::optional<type>
             {
-                const std::string& fname = call.name_.ident_.value_;
+                const std::string& fname = call.fn_.ident_.value_;
                 auto pit = prototype_map_.find(fname);
                 if (pit == prototype_map_.end())
                 {
-                    error(call.name_.ident_.loc_, "Call to undefined function '" + fname + "'");
+                    error(call.fn_.ident_.loc_, "Call to undefined function '" + fname + "'");
                     return {};
                 }
-                call.name_.proto_idx_ = pit->second;
+                call.fn_.proto_idx_ = pit->second;
                 const prototype& proto = prototypes_[pit->second];
 
                 if (call.args_.size() != proto.arg_types_.size())

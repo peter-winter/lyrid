@@ -111,8 +111,8 @@ int x = foo(42)
     REQUIRE(call.args_[0].inferred_type_.has_value());
     REQUIRE(call.args_[0].inferred_type_.value() == type::int_scalar);
 
-    REQUIRE(call.name_.proto_idx_.has_value());
-    REQUIRE(*call.name_.proto_idx_ == 0);
+    REQUIRE(call.fn_.proto_idx_.has_value());
+    REQUIRE(*call.fn_.proto_idx_ == 0);
 }
 
 TEST_CASE("Semantic valid: nested function calls with registered prototypes", "[semantics][valid]")
@@ -142,10 +142,10 @@ int y = bar(foo(1, 2.0))
     const auto& outer_call = std::get<f_call>(decl_y.value_.wrapped_);
     const auto& inner_call = std::get<f_call>(outer_call.args_[0].wrapped_);
 
-    REQUIRE(inner_call.name_.proto_idx_.has_value());
-    REQUIRE(*inner_call.name_.proto_idx_ == 0);
-    REQUIRE(outer_call.name_.proto_idx_.has_value());
-    REQUIRE(*outer_call.name_.proto_idx_ == 1);
+    REQUIRE(inner_call.fn_.proto_idx_.has_value());
+    REQUIRE(*inner_call.fn_.proto_idx_ == 0);
+    REQUIRE(outer_call.fn_.proto_idx_.has_value());
+    REQUIRE(*outer_call.fn_.proto_idx_ == 1);
 }
 
 TEST_CASE("Semantic valid: function call returning array used in declaration", "[semantics][valid]")
@@ -172,8 +172,8 @@ int[] arr = create_int_array(5)
     REQUIRE(decl_arr.value_.inferred_type_.value() == type::int_array);
 
     const auto& call = std::get<f_call>(decl_arr.value_.wrapped_);
-    REQUIRE(call.name_.proto_idx_.has_value());
-    REQUIRE(*call.name_.proto_idx_ == 0);
+    REQUIRE(call.fn_.proto_idx_.has_value());
+    REQUIRE(*call.fn_.proto_idx_ == 0);
 }
 
 TEST_CASE("Semantic valid: function call in array comprehension 'do' expression", "[semantics][valid]")
@@ -210,8 +210,8 @@ float[] res = [|i| in |src| do scale(i)]
     const auto& i_ref = std::get<symbol_ref>(call.args_[0].wrapped_);
     REQUIRE(!i_ref.declaration_idx_.has_value());
 
-    REQUIRE(call.name_.proto_idx_.has_value());
-    REQUIRE(*call.name_.proto_idx_ == 0);
+    REQUIRE(call.fn_.proto_idx_.has_value());
+    REQUIRE(*call.fn_.proto_idx_ == 0);
 }
 
 TEST_CASE("Resolution: top-level variable reference", "[semantics][valid]")
@@ -304,9 +304,9 @@ int[] res = [|i| in |a| do bar([|j| in |b| do foo(i, j)])]
 
     // Outer 'do' is call to 'bar'
     const auto& bar_call = std::get<f_call>(outer_comp.do_expr_->wrapped_);
-    REQUIRE(bar_call.name_.ident_.value_ == "bar");
-    REQUIRE(bar_call.name_.proto_idx_.has_value());
-    REQUIRE(*bar_call.name_.proto_idx_ == 1);  // bar registered second
+    REQUIRE(bar_call.fn_.ident_.value_ == "bar");
+    REQUIRE(bar_call.fn_.proto_idx_.has_value());
+    REQUIRE(*bar_call.fn_.proto_idx_ == 1);  // bar registered second
 
     // bar argument is inner comprehension
     const auto& inner_comp = std::get<comprehension>(bar_call.args_[0].wrapped_);
@@ -318,9 +318,9 @@ int[] res = [|i| in |a| do bar([|j| in |b| do foo(i, j)])]
 
     // Inner 'do' is call to 'foo'
     const auto& foo_call = std::get<f_call>(inner_comp.do_expr_->wrapped_);
-    REQUIRE(foo_call.name_.ident_.value_ == "foo");
-    REQUIRE(foo_call.name_.proto_idx_.has_value());
-    REQUIRE(*foo_call.name_.proto_idx_ == 0);  // foo registered first
+    REQUIRE(foo_call.fn_.ident_.value_ == "foo");
+    REQUIRE(foo_call.fn_.proto_idx_.has_value());
+    REQUIRE(*foo_call.fn_.proto_idx_ == 0);  // foo registered first
 
     // foo arguments: i (outer local, nullopt) and j (inner local, nullopt)
     const auto& i_ref = std::get<symbol_ref>(foo_call.args_[0].wrapped_);

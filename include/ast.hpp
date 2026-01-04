@@ -43,7 +43,7 @@ struct fun_ref
 
 struct f_call
 {
-    fun_ref name_;
+    fun_ref fn_;
     std::vector<expr_wrapper> args_;
 };
 

@@ -55,7 +55,7 @@ TEST_CASE("Function call with arguments", "[parser][valid]")
     REQUIRE(std::holds_alternative<f_call>(decl.value_.wrapped_));
 
     const f_call& call = std::get<f_call>(decl.value_.wrapped_);
-    REQUIRE(call.name_.ident_.value_ == "foo");
+    REQUIRE(call.fn_.ident_.value_ == "foo");
     REQUIRE(call.args_.size() == 3);
 
     REQUIRE(std::holds_alternative<int_scalar>(call.args_[0].wrapped_));
@@ -139,7 +139,7 @@ TEST_CASE("Nested function calls in arguments", "[parser][valid]")
     REQUIRE(std::holds_alternative<f_call>(decl.value_.wrapped_));
     const f_call& outer = std::get<f_call>(decl.value_.wrapped_);
 
-    REQUIRE(outer.name_.ident_.value_ == "foo");
+    REQUIRE(outer.fn_.ident_.value_ == "foo");
     REQUIRE(outer.args_.size() == 3);
 
     REQUIRE(std::holds_alternative<int_scalar>(outer.args_[0].wrapped_));
@@ -147,7 +147,7 @@ TEST_CASE("Nested function calls in arguments", "[parser][valid]")
 
     REQUIRE(std::holds_alternative<f_call>(outer.args_[1].wrapped_));
     const f_call& inner = std::get<f_call>(outer.args_[1].wrapped_);
-    REQUIRE(inner.name_.ident_.value_ == "bar");
+    REQUIRE(inner.fn_.ident_.value_ == "bar");
     REQUIRE(inner.args_.size() == 2);
 
     REQUIRE(std::holds_alternative<int_scalar>(inner.args_[0].wrapped_));
@@ -224,7 +224,7 @@ float[] res = [|i, f| in |ints, floats| do foo(i, f)]
 
     REQUIRE(std::holds_alternative<f_call>(fc.do_expr_->wrapped_));
     const f_call& call = std::get<f_call>(fc.do_expr_->wrapped_);
-    REQUIRE(call.name_.ident_.value_ == "foo");
+    REQUIRE(call.fn_.ident_.value_ == "foo");
     REQUIRE(call.args_.size() == 2);
     REQUIRE(std::holds_alternative<symbol_ref>(call.args_[0].wrapped_));
     REQUIRE(std::get<symbol_ref>(call.args_[0].wrapped_).ident_.value_ == "i");
@@ -279,7 +279,7 @@ TEST_CASE("Array indexing on function call", "[parser][valid]")
     REQUIRE(std::holds_alternative<f_call>(ia.base_->wrapped_));
     const f_call& call = std::get<f_call>(ia.base_->wrapped_);
 
-    REQUIRE(call.name_.ident_.value_ == "foo");
+    REQUIRE(call.fn_.ident_.value_ == "foo");
     REQUIRE(call.args_.size() == 2);
 }
 
@@ -369,7 +369,7 @@ int[] res = [|i| in |a| do [|j| in |b| do foo(i, j)]]
 
     REQUIRE(std::holds_alternative<f_call>(inner.do_expr_->wrapped_));
     const f_call& call = std::get<f_call>(inner.do_expr_->wrapped_);
-    REQUIRE(call.name_.ident_.value_ == "foo");
+    REQUIRE(call.fn_.ident_.value_ == "foo");
     REQUIRE(std::holds_alternative<symbol_ref>(call.args_[0].wrapped_));
     REQUIRE(std::get<symbol_ref>(call.args_[0].wrapped_).ident_.value_ == "i");
     REQUIRE(std::holds_alternative<symbol_ref>(call.args_[1].wrapped_));

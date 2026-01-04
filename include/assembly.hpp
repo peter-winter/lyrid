@@ -140,16 +140,21 @@ using instruction = std::variant<
     scall_f
 >;
 
+using const_int_memory = std::vector<int64_t>;
+using const_float_memory = std::vector<double>;
+using const_int_spans = std::vector<std::span<const int64_t>>;
+using const_float_spans = std::vector<std::span<const double>>;
+    
 struct program
 {
     std::vector<instruction> instructions_;
 
     size_t const_int_memory_size_;
     size_t const_float_memory_size_;
-    std::vector<int64_t> const_int_memory_;
-    std::vector<double> const_float_memory_;
-    std::vector<std::span<const int64_t>> const_int_array_spans_;
-    std::vector<std::span<const double>> const_float_array_spans_;
+    const_int_memory const_int_memory_;
+    const_float_memory const_float_memory_;
+    const_int_spans const_int_array_spans_;
+    const_float_spans const_float_array_spans_;
 };
 
 }

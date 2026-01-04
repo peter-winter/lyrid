@@ -108,7 +108,7 @@ int x = unknown_func(42)
     REQUIRE(sem_errors[0] == "Error [2, 9]: Call to undefined function 'unknown_func'");
 
     const auto& call = std::get<f_call>(prog.declarations_[0].value_.wrapped_);
-    REQUIRE(!call.name_.proto_idx_.has_value());
+    REQUIRE(!call.fn_.proto_idx_.has_value());
 }
 
 TEST_CASE("Semantic error: argument type mismatch with named parameter in error", "[semantics][error]")
@@ -133,7 +133,7 @@ float x = foo(1.0)
     REQUIRE(sem_errors[0] == "Error [2, 15]: Type mismatch for 'value' in call to 'foo': expected 'int' but got 'float'");
 
     const auto& call = std::get<f_call>(prog.declarations_[0].value_.wrapped_);
-    REQUIRE(call.name_.proto_idx_.has_value());
+    REQUIRE(call.fn_.proto_idx_.has_value());
 }
 
 TEST_CASE("Semantic error: return type mismatch in declaration", "[semantics][error]")
@@ -158,7 +158,7 @@ float x = foo()
     REQUIRE(sem_errors[0] == "Error [2, 11]: Type mismatch in declaration of 'x': declared as 'float' but expression has type 'int'");
 
     const auto& call = std::get<f_call>(prog.declarations_[0].value_.wrapped_);
-    REQUIRE(call.name_.proto_idx_.has_value());
+    REQUIRE(call.fn_.proto_idx_.has_value());
 }
 
 TEST_CASE("Semantic error: redeclaration of variable", "[semantics][error]")
