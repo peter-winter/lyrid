@@ -35,11 +35,11 @@ void translator::compute_constant_pool_sizes(const ast::program& prog)
             },
             [&](const ast::int_scalar&) -> void
             {
-                ++const_int_memory_size_;
+                ++program_.const_int_memory_size_;
             },
             [&](const ast::float_scalar&) -> void
             {
-                ++const_float_memory_size_;
+                ++program_.const_float_memory_size_;
             },
             [&](const auto&) -> void {}
         }, ew.wrapped_);
@@ -53,15 +53,15 @@ void translator::compute_constant_pool_sizes(const ast::program& prog)
 
 void translator::hoist_scalar_constants(ast::program& prog)
 {
-    const_int_memory_.reserve(const_int_memory_size_);
-    const_float_memory_.reserve(const_float_memory_size_);
+    program_.const_int_memory_.reserve(program_.const_int_memory_size_);
+    program_.const_float_memory_.reserve(program_.const_float_memory_size_);
 
     auto get_start_offset = [this](type arr_type)
     {
         if (arr_type == type::int_array)
-            return const_int_memory_.size();
+            return program_.const_int_memory_.size();
         else
-            return const_float_memory_.size();
+            return program_.const_float_memory_.size();
     };
 
     auto add_span_generic = [](auto& memory, auto& spans, size_t offset, size_t len)
@@ -76,9 +76,9 @@ void translator::hoist_scalar_constants(ast::program& prog)
     auto add_span = [this, add_span_generic](type arr_type, size_t offset, size_t len)
     {
         if (arr_type == type::int_array)
-            return add_span_generic(const_int_memory_, const_int_array_spans_, offset, len);
+            return add_span_generic(program_.const_int_memory_, program_.const_int_array_spans_, offset, len);
         else
-            return add_span_generic(const_float_memory_, const_float_array_spans_, offset, len);
+            return add_span_generic(program_.const_float_memory_, program_.const_float_array_spans_, offset, len);
     };
 
     auto hoist_visit = [&](auto&& self, ast::expr_wrapper& ew) -> bool
@@ -87,14 +87,14 @@ void translator::hoist_scalar_constants(ast::program& prog)
         {
             [&](ast::int_scalar& s) -> bool
             {
-                const_int_memory_.push_back(s.value_);
-                s.const_memory_idx_ = const_int_memory_.size() - 1;
+                program_.const_int_memory_.push_back(s.value_);
+                s.const_memory_idx_ = program_.const_int_memory_.size() - 1;
                 return true;
             },
             [&](ast::float_scalar& s) -> bool
             {
-                const_float_memory_.push_back(s.value_);
-                s.const_memory_idx_ = const_float_memory_.size() - 1;
+                program_.const_float_memory_.push_back(s.value_);
+                s.const_memory_idx_ = program_.const_float_memory_.size() - 1;
                 return true;
             },
             [&](ast::array_construction& ac) -> bool
@@ -149,12 +149,12 @@ void translator::hoist_scalar_constants(ast::program& prog)
 void translator::translate(const std::string& source)
 {
     errors_.clear();
-    const_int_memory_.clear();
-    const_float_memory_.clear();
-    const_int_array_spans_.clear();
-    const_float_array_spans_.clear();
-    const_int_memory_size_ = 0;
-    const_float_memory_size_ = 0;
+    program_.const_int_memory_.clear();
+    program_.const_float_memory_.clear();
+    program_.const_int_array_spans_.clear();
+    program_.const_float_array_spans_.clear();
+    program_.const_int_memory_size_ = 0;
+    program_.const_float_memory_size_ = 0;
 
     parser p;
     p.parse(source);
