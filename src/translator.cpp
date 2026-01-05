@@ -144,8 +144,8 @@ void translator::prepare_memory_model(ast::program& prog)
         }, ew.wrapped_);
     };
 
-    program_.const_int_memory_.reserve(256);
-    program_.const_float_memory_.reserve(256);
+    program_.const_int_memory_.reserve(should_be_more_than_enough_constants);
+    program_.const_float_memory_.reserve(should_be_more_than_enough_constants);
     
     for (auto& decl : prog.declarations_)
         analyze_memory(analyze_memory, decl.value_);
@@ -205,7 +205,7 @@ void translator::compute_global_max_args()
 void translator::emit_declarations(const ast::program& prog)
 {
     decl_regs_.clear();
-    decl_regs_.reserve(prog.declarations_.size());
+    decl_regs_.reserve(should_be_more_than_enough_registers);
 
     std::array<size_t, 4> next_reg{};
     next_reg.fill(global_max_args_);
@@ -213,11 +213,11 @@ void translator::emit_declarations(const ast::program& prog)
     for (size_t i = 0; i < prog.declarations_.size(); ++i)
     {
         const auto& decl = prog.declarations_[i];
-        reg_file reg_file = get_reg_file(decl.type_);
-        size_t reg_idx = next_reg[static_cast<size_t>(reg_file)]++;
-        decl_regs_.emplace_back(reg_file, reg_idx);
+        reg_file rf = get_reg_file(decl.type_);
+        size_t reg_idx = next_reg[std::to_underlying(rf)]++;
+        decl_regs_.emplace_back(rf, reg_idx);
 
-        emit_expr(decl.value_, reg_file, reg_idx);
+        emit_expr(decl.value_, rf, reg_idx);
     }
 }
 

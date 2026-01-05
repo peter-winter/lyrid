@@ -48,6 +48,9 @@ public:
     assembly::program& get_program() { return program_; }
     
 private:
+    constexpr static size_t should_be_more_than_enough_constants = 256;
+    constexpr static size_t should_be_more_than_enough_registers = 256;
+    
     struct function
     {
         std::string name_;
