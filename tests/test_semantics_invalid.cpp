@@ -122,7 +122,7 @@ float x = foo(1.0)
     REQUIRE(parse_errors.empty());
 
     semantic_analyzer sa;
-    sa.register_function_prototype("foo", {type::int_scalar}, {"value"}, type::float_scalar);
+    sa.register_function_prototype("foo", {int_scalar_type{}}, {"value"}, float_scalar_type{});
 
     program& prog = p.get_program();
     sa.analyze(prog);
@@ -147,7 +147,7 @@ float x = foo()
     REQUIRE(parse_errors.empty());
 
     semantic_analyzer sa;
-    sa.register_function_prototype("foo", {}, {}, type::int_scalar);
+    sa.register_function_prototype("foo", {}, {}, int_scalar_type{});
 
     program& prog = p.get_program();
     sa.analyze(prog);
@@ -209,7 +209,7 @@ TEST_CASE("Semantic error: incorrect number of arguments in function call", "[se
     REQUIRE(parse_errors.empty());
 
     semantic_analyzer sa;
-    sa.register_function_prototype("foo", {type::int_scalar}, {"a"}, type::int_scalar);
+    sa.register_function_prototype("foo", {int_scalar_type{}}, {"a"}, int_scalar_type{});
 
     program& prog = p.get_program();
     sa.analyze(prog);

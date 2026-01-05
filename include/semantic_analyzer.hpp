@@ -36,6 +36,7 @@ private:
     };
     
     std::string type_to_string(type t) const;
+    std::string scalar_type_to_string(scalar_type t) const;
 
     void error(const ast::source_location& loc, const std::string& message);
     

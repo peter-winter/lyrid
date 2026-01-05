@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 #include <span>
-#include <optional>
+#include <utility>
 
 namespace lyrid
 {
@@ -35,8 +35,14 @@ public:
     const assembly::const_int_memory& get_const_int_memory() const { return program_.const_int_memory_; }
     const assembly::const_float_memory& get_const_float_memory() const { return program_.const_float_memory_; }
 
-    const assembly::const_int_spans& get_const_int_array_spans() const { return program_.const_int_array_spans_; }
-    const assembly::const_float_spans& get_const_float_array_spans() const { return program_.const_float_array_spans_; }
+    const assembly::const_int_spans& get_const_int_array_spans() const { return program_.const_int_array_memory_spans_; }
+    const assembly::const_float_spans& get_const_float_array_spans() const { return program_.const_float_array_memory_spans_; }
+
+    const assembly::array_spans& get_int_array_spans(memory_type mt) const { return program_.get_int_array_spans(mt); }
+    const assembly::array_spans& get_float_array_spans(memory_type mt) const { return program_.get_float_array_spans(mt); }
+
+    size_t get_mutable_int_memory_size() const { return program_.mutable_int_memory_size_; }
+    size_t get_mutable_float_memory_size() const { return program_.mutable_float_memory_size_; }
     
     const assembly::program& get_program() const { return program_; }
     assembly::program& get_program() { return program_; }
@@ -48,18 +54,11 @@ private:
         prototype proto_;
     };
 
-    void compute_constant_pool_sizes(const ast::program& prog);
-
-    void hoist_scalar_constants(ast::program& prog);
+    void prepare_memory_model(ast::program& prog);
     
-    enum class reg_file
-    {
-        i_scalar,
-        f_scalar,
-        i_span,
-        f_span
-    };
-
+    enum class reg_file : size_t { i_scalar = 0, f_scalar = 1, i_span = 2, f_span = 3 };
+    
+    static reg_file get_span_reg_file(scalar_type t);
     static reg_file get_reg_file(type t);
     
     void translation_error(const ast::source_location& loc, const std::string& message);

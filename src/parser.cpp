@@ -342,12 +342,12 @@ std::optional<type> parser::parse_type()
 
     if (kw == "int")
     {
-        return is_array ? type::int_array : type::int_scalar;
+        return is_array ? type(array_type(int_scalar_type{})) : type(int_scalar_type{});
     }
 
     if (kw == "float")
     {
-        return is_array ? type::float_array : type::float_scalar;
+        return is_array ? type(array_type(float_scalar_type{})) : type(float_scalar_type{});
     }
 
     error(kw_loc, "Unknown type '" + kw + "'; expected 'int' or 'float'");

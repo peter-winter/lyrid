@@ -1,14 +1,81 @@
 #pragma once
 
+#include <variant>
+
+#include "utility.hpp"
+
 namespace lyrid
 {
     
-enum class type
+struct int_scalar_type
+{};
+
+struct float_scalar_type
+{};
+
+inline bool operator == (int_scalar_type, int_scalar_type) { return true; }
+inline bool operator == (float_scalar_type, float_scalar_type) { return true; }
+inline bool operator == (float_scalar_type, int_scalar_type) { return false; }
+inline bool operator == (int_scalar_type, float_scalar_type) { return false; }
+
+using scalar_type = std::variant<int_scalar_type, float_scalar_type>;
+
+inline bool operator == (scalar_type t1, scalar_type t2)
 {
-    int_scalar,
-    float_scalar,
-    int_array,
-    float_array
+    return std::visit([](auto x1, auto x2){ return x1 == x2; }, t1, t2);
+}
+
+struct array_type
+{
+    scalar_type sc_;
 };
+
+inline bool operator == (array_type a1, array_type a2)
+{
+    return a1.sc_ == a2.sc_;
+}
+
+using type = std::variant<array_type, float_scalar_type, int_scalar_type>;
+
+inline bool operator == (type t1, type t2)
+{
+    return std::visit([](auto x1, auto x2){ return x1 == x2; }, t1, t2);
+}
+
+inline bool is_array_type(type t)
+{
+    return std::visit(
+        overloaded
+        {
+            [](auto) { return false; },
+            [](array_type) { return true; }
+        },
+        t
+    );
+}
+
+inline bool is_scalar_type(type t)
+{
+    return !is_array_type(t);
+}
+
+inline type to_array_type(type t)
+{
+    return std::visit(
+        overloaded
+        {
+            [](int_scalar_type i) { return type(array_type{i}); },
+            [](float_scalar_type f) { return type(array_type{f}); },
+            [](array_type x) { return type(x); }
+        },
+        t
+    );
+}
+
+inline type get_element_type(array_type ar)
+{
+    return type(std::visit([](auto x){ return type(x); }, ar.sc_));
+}
+
 
 }

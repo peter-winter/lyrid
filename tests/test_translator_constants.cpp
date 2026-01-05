@@ -214,7 +214,7 @@ float[] res = [|x| in |src| do 3.0]
 TEST_CASE("Translator constants: function call returning scalar (no literals)", "[translator][constants]")
 {
     translator t;
-    t.register_function("get_scalar", {}, {}, type::int_scalar);
+    t.register_function("get_scalar", {}, {}, int_scalar_type{});
 
     t.translate("int x = get_scalar()");
 
@@ -237,7 +237,7 @@ TEST_CASE("Translator constants: function call returning scalar (no literals)", 
 TEST_CASE("Translator constants: function call returning array (no literals)", "[translator][constants]")
 {
     translator t;
-    t.register_function("get_array", {}, {}, type::float_array);
+    t.register_function("get_array", {}, {}, array_type{float_scalar_type{}});
 
     t.translate("float[] arr = get_array()");
 
@@ -260,8 +260,8 @@ TEST_CASE("Translator constants: function call returning array (no literals)", "
 TEST_CASE("Translator constants: index access with function calls (no literals)", "[translator][constants]")
 {
     translator t;
-    t.register_function("get_arr", {}, {}, type::int_array);
-    t.register_function("get_idx", {}, {}, type::int_scalar);
+    t.register_function("get_arr", {}, {}, array_type{int_scalar_type{}});
+    t.register_function("get_idx", {}, {}, int_scalar_type{});
 
     t.translate(R"(
 int[] arr = get_arr()
@@ -288,8 +288,8 @@ int val = arr[idx]
 TEST_CASE("Translator constants: array comprehension with function calls (no literals)", "[translator][constants]")
 {
     translator t;
-    t.register_function("get_src", {}, {}, type::int_array);
-    t.register_function("transform", {type::int_scalar}, {"v"}, type::int_scalar);
+    t.register_function("get_src", {}, {}, array_type{int_scalar_type{}});
+    t.register_function("transform", {int_scalar_type{}}, {"v"}, int_scalar_type{});
 
     t.translate(R"(
 int[] src = get_src()
@@ -315,9 +315,9 @@ int[] res = [|i| in |src| do transform(i)]
 TEST_CASE("Translator constants: mixed constructs (function calls, index access, symbol references) - no literals at all", "[translator][constants]")
 {
     translator t;
-    t.register_function("make_array", {}, {}, type::float_array);
-    t.register_function("make_index", {}, {}, type::int_scalar);
-    t.register_function("process", {type::float_scalar}, {"v"}, type::float_scalar);
+    t.register_function("make_array", {}, {}, array_type{float_scalar_type{}});
+    t.register_function("make_index", {}, {}, int_scalar_type{});
+    t.register_function("process", {float_scalar_type{}}, {"v"}, float_scalar_type{});
 
     t.translate(R"(
 float[] data = make_array()
@@ -367,7 +367,7 @@ TEST_CASE("Translator constants: empty program (no declarations, no constants)",
 TEST_CASE("Translator constants: function call with literal scalar arguments", "[translator][constants]")
 {
     translator t;
-    t.register_function("foo", {type::int_scalar, type::float_scalar}, {"i", "f"}, type::int_scalar);
+    t.register_function("foo", {int_scalar_type{}, float_scalar_type{}}, {"i", "f"}, int_scalar_type{});
 
     t.translate("int res = foo(42, 3.14)");
 
@@ -390,8 +390,8 @@ TEST_CASE("Translator constants: function call with literal scalar arguments", "
 TEST_CASE("Translator constants: nested function calls with literal arguments", "[translator][constants]")
 {
     translator t;
-    t.register_function("inner", {type::int_scalar, type::float_scalar}, {"a", "b"}, type::float_scalar);
-    t.register_function("outer", {type::float_scalar, type::int_scalar}, {"x", "y"}, type::int_scalar);
+    t.register_function("inner", {int_scalar_type{}, float_scalar_type{}}, {"a", "b"}, float_scalar_type{});
+    t.register_function("outer", {float_scalar_type{}, int_scalar_type{}}, {"x", "y"}, int_scalar_type{});
 
     t.translate("int res = outer(inner(10, 2.5), 100)");
 
@@ -414,7 +414,7 @@ TEST_CASE("Translator constants: nested function calls with literal arguments", 
 TEST_CASE("Translator constants: function call with literal array argument", "[translator][constants]")
 {
     translator t;
-    t.register_function("process", {type::float_array}, {"arr"}, type::float_scalar);
+    t.register_function("process", {array_type{float_scalar_type{}}}, {"arr"}, float_scalar_type{});
 
     t.translate("float res = process([1.0, 2.0, 3.0])");
 
@@ -435,7 +435,7 @@ TEST_CASE("Translator constants: function call with literal array argument", "[t
 TEST_CASE("Translator constants: index access with literal index on symbol reference", "[translator][constants]")
 {
     translator t;
-    t.register_function("get_arr", {}, {}, type::int_array);
+    t.register_function("get_arr", {}, {}, array_type{int_scalar_type{}});
 
     t.translate(R"(
 int[] arr = get_arr()
@@ -480,7 +480,7 @@ TEST_CASE("Translator constants: index access on literal array with literal inde
 TEST_CASE("Translator constants: index access on function call returning array with literal index", "[translator][constants]")
 {
     translator t;
-    t.register_function("get_arr", {}, {}, type::float_array);
+    t.register_function("get_arr", {}, {}, array_type{float_scalar_type{}});
 
     t.translate("float val = get_arr()[1]");
 
@@ -503,7 +503,7 @@ TEST_CASE("Translator constants: index access on function call returning array w
 TEST_CASE("Translator constants: mixed - function call containing literal array and index access on literal array", "[translator][constants]")
 {
     translator t;
-    t.register_function("process", {type::int_array, type::int_scalar}, {"arr", "idx"}, type::int_scalar);
+    t.register_function("process", {array_type{int_scalar_type{}}, int_scalar_type{}}, {"arr", "idx"}, int_scalar_type{});
 
     t.translate(R"(
 int[] src = [100, 200]

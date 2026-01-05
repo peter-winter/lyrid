@@ -32,16 +32,26 @@ void semantic_analyzer::register_function_prototype(
     prototype_map_[name] = prototypes_.size() - 1;
 }
 
+std::string semantic_analyzer::scalar_type_to_string(scalar_type t) const
+{
+    return std::visit(
+        overloaded
+        {
+            [](int_scalar_type) { return "int"; },
+            [](float_scalar_type) { return "float"; }
+        },
+    t);
+}
+
 std::string semantic_analyzer::type_to_string(type t) const
 {
-    switch (t)
-    {
-        case type::int_scalar:   return "int";
-        case type::float_scalar: return "float";
-        case type::int_array:    return "int[]";
-        case type::float_array:  return "float[]";
-    }
-    return "unknown";
+    return std::visit(
+        overloaded
+        {
+            [&](auto sc) { return scalar_type_to_string(sc); },
+            [&](array_type ar) { return scalar_type_to_string(ar.sc_) + "[]"; }
+        },
+    t);
 }
 
 void semantic_analyzer::analyze(program& prog)
@@ -60,11 +70,11 @@ void semantic_analyzer::analyze(program& prog)
         {
             [&wrapper](int_scalar&) -> std::optional<type>
             {
-                return wrapper.inferred_type_ = type::int_scalar;
+                return wrapper.inferred_type_ = int_scalar_type{};
             },
             [&wrapper](float_scalar&) -> std::optional<type>
             {
-                return wrapper.inferred_type_ = type::float_scalar;
+                return wrapper.inferred_type_ = float_scalar_type{};
             },
             [this, &wrapper, &current_scope](symbol_ref& sr) -> std::optional<type>
             {
@@ -131,28 +141,21 @@ void semantic_analyzer::analyze(program& prog)
                     return {};
                 }
 
-                type element_type;
-                if (*base_type == type::int_array)
-                {
-                    element_type = type::int_scalar;
-                }
-                else if (*base_type == type::float_array)
-                {
-                    element_type = type::float_scalar;
-                }
-                else
+                if (!is_array_type(*base_type))
                 {
                     error(acc.base_->loc_, "Indexing applied to non-array type '" + type_to_string(*base_type) + "'");
                     return {};
                 }
-
+                
+                type element_type = get_element_type(std::get<array_type>(*base_type));
+                
                 std::optional<type> index_type = self(self, *acc.index_, current_scope);
                 if (!index_type)
                 {
                     return {};
                 }
 
-                if (*index_type != type::int_scalar)
+                if (!std::holds_alternative<int_scalar_type>(*index_type))
                 {
                     error(acc.index_->loc_, "Array index must be of type 'int', but got '" + type_to_string(*index_type) + "'");
                     return {};
@@ -169,7 +172,7 @@ void semantic_analyzer::analyze(program& prog)
                 }
 
                 std::optional<type> elem_type;
-
+                
                 for (auto& elem : ac.elements_)
                 {
                     std::optional<type> t_opt = self(self, elem, current_scope);
@@ -180,7 +183,7 @@ void semantic_analyzer::analyze(program& prog)
 
                     type t = *t_opt;
 
-                    if (t != type::int_scalar && t != type::float_scalar)
+                    if (!is_scalar_type(t))
                     {
                         error(elem.loc_, "Array construction elements must be scalar types, but got '" + type_to_string(t) + "'");
                         return {};
@@ -199,7 +202,7 @@ void semantic_analyzer::analyze(program& prog)
                     }
                 }
 
-                return wrapper.inferred_type_ = ((*elem_type == type::int_scalar) ? type::int_array : type::float_array);
+                return wrapper.inferred_type_ = to_array_type(*elem_type);
             },
             [this, &wrapper, &current_scope, &self](comprehension& comp) -> std::optional<type>
             {
@@ -215,24 +218,18 @@ void semantic_analyzer::analyze(program& prog)
                 for (auto& src : comp.in_exprs_)
                 {
                     std::optional<type> src_type = self(self, src, current_scope);
-                    if (!src_type) return {};
+                    if (!src_type)
+                        return {};
 
-                    type elem_t;
-                    if (*src_type == type::int_array)
-                    {
-                        elem_t = type::int_scalar;
-                    }
-                    else if (*src_type == type::float_array)
-                    {
-                        elem_t = type::float_scalar;
-                    }
-                    else
+                    if (!is_array_type(*src_type))
                     {
                         error(src.loc_,
                               "Source in array comprehension must be an array type, got '" +
                               type_to_string(*src_type) + "'");
                         return {};
                     }
+                    
+                    type elem_t = get_element_type(std::get<array_type>(*src_type));
                     elem_types.push_back(elem_t);
                 }
 
@@ -256,7 +253,7 @@ void semantic_analyzer::analyze(program& prog)
                 if (!body_type) 
                     return {};
 
-                if (*body_type != type::int_scalar && *body_type != type::float_scalar)
+                if (!is_scalar_type(*body_type))
                 {
                     error(comp.do_expr_->loc_,
                           "'do' expression in array comprehension must be a scalar type, got '" +
@@ -264,7 +261,7 @@ void semantic_analyzer::analyze(program& prog)
                     return {};
                 }
 
-                return wrapper.inferred_type_ = ((*body_type == type::int_scalar) ? type::int_array : type::float_array);
+                return wrapper.inferred_type_ = to_array_type(*body_type);
             },
         }, wrapper.wrapped_);
     };

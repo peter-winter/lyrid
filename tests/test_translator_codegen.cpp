@@ -32,8 +32,8 @@ void require_mov_f_const(size_t idx, const assembly::instruction& i, size_t dst,
 void require_smov_i_const(size_t idx, const assembly::instruction& i, size_t dst, size_t src_const)
 {
     INFO("Instruction " << idx);
-    REQUIRE(std::holds_alternative<assembly::smov_i_reg_const>(i));
-    const auto& m = std::get<assembly::smov_i_reg_const>(i);
+    REQUIRE(std::holds_alternative<assembly::mov_is_reg_const>(i));
+    const auto& m = std::get<assembly::mov_is_reg_const>(i);
     REQUIRE(m.dst_ == dst);
     REQUIRE(m.src_ == src_const);
 }
@@ -41,8 +41,8 @@ void require_smov_i_const(size_t idx, const assembly::instruction& i, size_t dst
 void require_smov_f_const(size_t idx, const assembly::instruction& i, size_t dst, size_t src_const)
 {
     INFO("Instruction " << idx);
-    REQUIRE(std::holds_alternative<assembly::smov_f_reg_const>(i));
-    const auto& m = std::get<assembly::smov_f_reg_const>(i);
+    REQUIRE(std::holds_alternative<assembly::mov_fs_reg_const>(i));
+    const auto& m = std::get<assembly::mov_fs_reg_const>(i);
     REQUIRE(m.dst_ == dst);
     REQUIRE(m.src_ == src_const);
 }
@@ -68,8 +68,8 @@ void require_mov_f_reg(size_t idx, const assembly::instruction& i, size_t dst, s
 void require_smov_i_reg(size_t idx, const assembly::instruction& i, size_t dst, size_t src)
 {
     INFO("Instruction " << idx);
-    REQUIRE(std::holds_alternative<assembly::smov_i_reg_reg>(i));
-    const auto& m = std::get<assembly::smov_i_reg_reg>(i);
+    REQUIRE(std::holds_alternative<assembly::mov_is_reg_reg>(i));
+    const auto& m = std::get<assembly::mov_is_reg_reg>(i);
     REQUIRE(m.dst_ == dst);
     REQUIRE(m.src_ == src);
 }
@@ -77,8 +77,8 @@ void require_smov_i_reg(size_t idx, const assembly::instruction& i, size_t dst, 
 void require_smov_f_reg(size_t idx, const assembly::instruction& i, size_t dst, size_t src)
 {
     INFO("Instruction " << idx);
-    REQUIRE(std::holds_alternative<assembly::smov_f_reg_reg>(i));
-    const auto& m = std::get<assembly::smov_f_reg_reg>(i);
+    REQUIRE(std::holds_alternative<assembly::mov_fs_reg_reg>(i));
+    const auto& m = std::get<assembly::mov_fs_reg_reg>(i);
     REQUIRE(m.dst_ == dst);
     REQUIRE(m.src_ == src);
 }
@@ -180,7 +180,7 @@ int y = x
 TEST_CASE("Codegen: simple function call (no args)", "[translator][codegen]")
 {
     translator t;
-    t.register_function("foo", {}, {}, type::int_scalar);
+    t.register_function("foo", {}, {}, int_scalar_type{});
 
     t.translate("int res = foo()");
     REQUIRE(t.is_valid());
@@ -193,7 +193,7 @@ TEST_CASE("Codegen: simple function call (no args)", "[translator][codegen]")
 TEST_CASE("Codegen: function call with literal arguments", "[translator][codegen]")
 {
     translator t;
-    t.register_function("process", {type::int_scalar, type::float_scalar}, {"i", "f"}, type::int_scalar);
+    t.register_function("process", {int_scalar_type{}, float_scalar_type{}}, {"i", "f"}, int_scalar_type{});
 
     t.translate("int res = process(42, 2.71)");
     REQUIRE(t.is_valid());
@@ -209,8 +209,8 @@ TEST_CASE("Codegen: function call with literal arguments", "[translator][codegen
 TEST_CASE("Codegen: nested function calls", "[translator][codegen]")
 {
     translator t;
-    t.register_function("inner", {type::int_scalar}, {"v"}, type::float_scalar);
-    t.register_function("outer", {type::float_scalar, type::int_scalar}, {"f", "i"}, type::int_scalar);
+    t.register_function("inner", {int_scalar_type{}}, {"v"}, float_scalar_type{});
+    t.register_function("outer", {float_scalar_type{}, int_scalar_type{}}, {"f", "i"}, int_scalar_type{});
 
     t.translate("int result = outer(inner(5), 10)");
     REQUIRE(t.is_valid());
@@ -266,7 +266,7 @@ TEST_CASE("Codegen: comprehension unsupported", "[translator][codegen]")
 TEST_CASE("Codegen: mixed declarations and calls", "[translator][codegen]")
 {
     translator t;
-    t.register_function("transform", {type::int_scalar}, {"v"}, type::int_scalar);
+    t.register_function("transform", {int_scalar_type{}}, {"v"}, int_scalar_type{});
 
     t.translate(R"(
 int base = 100

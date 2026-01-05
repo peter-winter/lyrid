@@ -32,7 +32,7 @@ TEST_CASE("Single int declaration", "[parser][valid]")
     REQUIRE(prog.declarations_.size() == 1);
 
     const declaration& decl = prog.declarations_[0];
-    REQUIRE(decl.type_ == type::int_scalar);
+    REQUIRE(std::holds_alternative<int_scalar_type>(decl.type_));
     REQUIRE(decl.name_.value_ == "x");
     REQUIRE(std::holds_alternative<int_scalar>(decl.value_.wrapped_));
     REQUIRE(std::get<int_scalar>(decl.value_.wrapped_).value_ == 42);
@@ -51,7 +51,7 @@ TEST_CASE("Function call with arguments", "[parser][valid]")
     REQUIRE(prog.declarations_.size() == 1);
 
     const declaration& decl = prog.declarations_[0];
-    REQUIRE(decl.type_ == type::int_scalar);
+    REQUIRE(std::holds_alternative<int_scalar_type>(decl.type_));
     REQUIRE(std::holds_alternative<f_call>(decl.value_.wrapped_));
 
     const f_call& call = std::get<f_call>(decl.value_.wrapped_);
@@ -83,7 +83,8 @@ float[] float_arr = [1.0, 2.0, .5]
     REQUIRE(prog.declarations_.size() == 2);
 
     const declaration& decl0 = prog.declarations_[0];
-    REQUIRE(decl0.type_ == type::int_array);
+    REQUIRE(std::holds_alternative<array_type>(decl0.type_));
+    REQUIRE(std::holds_alternative<int_scalar_type>(std::get<array_type>(decl0.type_).sc_));
     REQUIRE(std::holds_alternative<array_construction>(decl0.value_.wrapped_));
     const array_construction& arr0 = std::get<array_construction>(decl0.value_.wrapped_);
     REQUIRE(arr0.elements_.size() == 3);
@@ -93,7 +94,8 @@ float[] float_arr = [1.0, 2.0, .5]
     REQUIRE(std::get<int_scalar>(arr0.elements_[2].wrapped_).value_ == 3);
 
     const declaration& decl1 = prog.declarations_[1];
-    REQUIRE(decl1.type_ == type::float_array);
+    REQUIRE(std::holds_alternative<array_type>(decl1.type_));
+    REQUIRE(std::holds_alternative<float_scalar_type>(std::get<array_type>(decl1.type_).sc_));
     REQUIRE(std::holds_alternative<array_construction>(decl1.value_.wrapped_));
     const array_construction& arr1 = std::get<array_construction>(decl1.value_.wrapped_);
     REQUIRE(arr1.elements_.size() == 3);
@@ -133,7 +135,7 @@ TEST_CASE("Nested function calls in arguments", "[parser][valid]")
     REQUIRE(prog.declarations_.size() == 1);
 
     const declaration& decl = prog.declarations_[0];
-    REQUIRE(decl.type_ == type::int_scalar);
+    REQUIRE(std::holds_alternative<int_scalar_type>(decl.type_));
     REQUIRE(decl.name_.value_ == "result");
 
     REQUIRE(std::holds_alternative<f_call>(decl.value_.wrapped_));
@@ -176,7 +178,8 @@ int[] res = [|i| in |src| do 42]
     REQUIRE(prog.declarations_.size() == 2);
 
     const declaration& decl = prog.declarations_[1];
-    REQUIRE(decl.type_ == type::int_array);
+    REQUIRE(std::holds_alternative<array_type>(decl.type_));
+    REQUIRE(std::holds_alternative<int_scalar_type>(std::get<array_type>(decl.type_).sc_));
     REQUIRE(decl.name_.value_ == "res");
     REQUIRE(std::holds_alternative<comprehension>(decl.value_.wrapped_));
 
@@ -208,7 +211,8 @@ float[] res = [|i, f| in |ints, floats| do foo(i, f)]
     REQUIRE(prog.declarations_.size() == 3);
 
     const declaration& decl = prog.declarations_[2];
-    REQUIRE(decl.type_ == type::float_array);
+    REQUIRE(std::holds_alternative<array_type>(decl.type_));
+    REQUIRE(std::holds_alternative<float_scalar_type>(std::get<array_type>(decl.type_).sc_));
     REQUIRE(decl.name_.value_ == "res");
     REQUIRE(std::holds_alternative<comprehension>(decl.value_.wrapped_));
 
@@ -248,7 +252,7 @@ float x = arr[idx]
     REQUIRE(prog.declarations_.size() == 3);
 
     const declaration& decl = prog.declarations_[2];
-    REQUIRE(decl.type_ == type::float_scalar);
+    REQUIRE(std::holds_alternative<float_scalar_type>(decl.type_));
     REQUIRE(std::holds_alternative<index_access>(decl.value_.wrapped_));
 
     const index_access& ia = std::get<index_access>(decl.value_.wrapped_);
@@ -323,7 +327,7 @@ int x = [|i| in |src| do i][1]
     REQUIRE(prog.declarations_.size() == 2);
 
     const declaration& decl = prog.declarations_[1];
-    REQUIRE(decl.type_ == type::int_scalar);
+    REQUIRE(std::holds_alternative<int_scalar_type>(decl.type_));
     REQUIRE(std::holds_alternative<index_access>(decl.value_.wrapped_));
 
     const index_access& ia = std::get<index_access>(decl.value_.wrapped_);
@@ -466,7 +470,8 @@ TEST_CASE("Array literals containing scientific notation floats", "[parser][vali
     REQUIRE(prog.declarations_.size() == 1);
 
     const declaration& decl = prog.declarations_[0];
-    REQUIRE(decl.type_ == type::float_array);
+    REQUIRE(std::holds_alternative<array_type>(decl.type_));
+    REQUIRE(std::holds_alternative<float_scalar_type>(std::get<array_type>(decl.type_).sc_));
     REQUIRE(std::holds_alternative<array_construction>(decl.value_.wrapped_));
 
     const array_construction& arr = std::get<array_construction>(decl.value_.wrapped_);

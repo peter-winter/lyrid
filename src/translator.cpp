@@ -7,95 +7,74 @@
 namespace lyrid
 {
 
+translator::reg_file translator::get_span_reg_file(scalar_type t)
+{
+    return std::visit(
+        overloaded
+        {
+            [](int_scalar_type) { return reg_file::i_span; },
+            [](float_scalar_type) { return reg_file::f_span; }
+        },
+        t
+    );  
+}
+
 translator::reg_file translator::get_reg_file(type t)
 {
-    switch (t)
-    {
-        case type::int_scalar:  return reg_file::i_scalar;
-        case type::float_scalar:return reg_file::f_scalar;
-        case type::int_array:   return reg_file::i_span;
-        case type::float_array: return reg_file::f_span;
-    }
-    std::unreachable();
-}
-
-void translator::compute_constant_pool_sizes(const ast::program& prog)
-{
-    auto count_visit = [&](auto&& self, const ast::expr_wrapper& ew) -> void
-    {
-        std::visit(overloaded
+    return std::visit(
+        overloaded
         {
-            [&](const ast::f_call& call) -> void
-            {
-                for (const auto& a : call.args_)
-                    self(self, a);
-            },
-            [&](const ast::index_access& ia) -> void
-            {
-                self(self, *ia.base_); 
-                self(self, *ia.index_);
-            },
-            [&](const ast::array_construction& ac) -> void
-            {
-                for (const auto& e : ac.elements_)
-                    self(self, e); 
-            },
-            [&](const ast::comprehension& comp) -> void
-            {
-                for (const auto& i : comp.in_exprs_)
-                    self(self, i); 
-                self(self, *comp.do_expr_);
-            },
-            [&](const ast::int_scalar&) -> void
-            {
-                ++program_.const_int_memory_size_;
-            },
-            [&](const ast::float_scalar&) -> void
-            {
-                ++program_.const_float_memory_size_;
-            },
-            [&](const auto&) -> void {}
-        }, ew.wrapped_);
-    };
-
-    for (const auto& decl : prog.declarations_)
-    {
-        count_visit(count_visit, decl.value_);
-    }
+            [](int_scalar_type) { return reg_file::i_scalar; },
+            [](float_scalar_type) { return reg_file::f_scalar; },
+            [](array_type ar) { return get_span_reg_file(ar.sc_); }
+        },
+        t
+    );
 }
 
-void translator::hoist_scalar_constants(ast::program& prog)
+void translator::prepare_memory_model(ast::program& prog)
 {
-    program_.const_int_memory_.reserve(program_.const_int_memory_size_);
-    program_.const_float_memory_.reserve(program_.const_float_memory_size_);
-
-    auto get_start_offset = [this](type arr_type)
+    auto get_const_pool_offset = [&] (scalar_type st) -> size_t
     {
-        if (arr_type == type::int_array)
-            return program_.const_int_memory_.size();
-        else
-            return program_.const_float_memory_.size();
+        return std::visit(
+            overloaded
+            {
+                [&](int_scalar_type) { return program_.const_int_memory_.size(); },
+                [&](float_scalar_type) { return program_.const_float_memory_.size(); }
+            },
+            st
+        );
+    };
+    
+    auto get_mutable_pool_size = [&] (scalar_type st) -> size_t&
+    {
+        return std::visit(
+            overloaded
+            {
+                [&](int_scalar_type) -> size_t& { return program_.mutable_int_memory_size_; },
+                [&](float_scalar_type) -> size_t& { return program_.mutable_float_memory_size_; }
+            },
+            st
+        );
+    };
+        
+    auto get_spans = [&] (scalar_type st, memory_type mt) -> assembly::array_spans&
+    {
+        return std::visit(
+            overloaded
+            {
+                [&](int_scalar_type) -> assembly::array_spans& { return program_.get_int_array_spans(mt); },
+                [&](float_scalar_type) -> assembly::array_spans& { return program_.get_float_array_spans(mt); }
+            },
+            st
+        );
     };
 
-    auto add_span_generic = [](auto& memory, auto& spans, size_t offset, size_t len)
+    auto analyze_memory = [&](auto&& self, ast::expr_wrapper& ew) -> bool
     {
-        auto begin_it = memory.cbegin() + static_cast<std::ptrdiff_t>(offset);
-        auto end_it = begin_it + static_cast<std::ptrdiff_t>(len);
-        std::span sp(begin_it, end_it);
-        spans.push_back(sp);
-        return spans.size() - 1;
-    };
-
-    auto add_span = [this, add_span_generic](type arr_type, size_t offset, size_t len)
-    {
-        if (arr_type == type::int_array)
-            return add_span_generic(program_.const_int_memory_, program_.const_int_array_spans_, offset, len);
-        else
-            return add_span_generic(program_.const_float_memory_, program_.const_float_array_spans_, offset, len);
-    };
-
-    auto hoist_visit = [&](auto&& self, ast::expr_wrapper& ew) -> bool
-    {
+        if (!expect(ew.inferred_type_.has_value(), ew.loc_, "Missing inferred type for expression"))
+            return false;
+        
         return std::visit(overloaded
         {
             [&](ast::int_scalar& s) -> bool
@@ -112,25 +91,37 @@ void translator::hoist_scalar_constants(ast::program& prog)
             },
             [&](ast::array_construction& ac) -> bool
             {
-                type arr_type = ew.inferred_type_.value();
-                size_t start_offset = get_start_offset(arr_type);
-                bool valid = true;
+                if (ac.elements_.empty())
+                    return false;
 
-                for (auto& e : ac.elements_)
-                    valid = self(self, e) && valid;
+                array_type arr_type = std::get<array_type>(ew.inferred_type_.value());
                 
-                if (valid)
-                {
-                    size_t span_idx = add_span(arr_type, start_offset, ac.elements_.size());
-                    ac.const_memory_span_idx_ = span_idx;
-                }
-
-                return valid;
+                size_t len = ac.elements_.size();
+    
+                size_t const_pool_offset = get_const_pool_offset(arr_type.sc_);
+                size_t& mutable_pool_size = get_mutable_pool_size(arr_type.sc_);
+                
+                bool all_const = true;
+                for (auto& elem : ac.elements_)
+                    if (!self(self, elem))
+                        all_const = false;
+                
+                memory_type mem_type = all_const ? memory_type::mem_const : memory_type::mem_mutable;
+                auto& spans = get_spans(arr_type.sc_, mem_type);
+                size_t idx = spans.size();
+                size_t offset = all_const ? const_pool_offset : mutable_pool_size;
+                spans.emplace_back(assembly::span{offset, len});
+                ac.memory_annotation_ = memory_span_annotation{ mem_type, idx };
+                
+                if (!all_const)
+                    mutable_pool_size += len;
+                
+                return false;
             },
             [&](ast::f_call& call) -> bool
             {
-                for (auto& a : call.args_)
-                    self(self, a);
+                for (auto& arg : call.args_)
+                    self(self, arg);
                 return false;
             },
             [&](ast::index_access& ia) -> bool
@@ -146,20 +137,33 @@ void translator::hoist_scalar_constants(ast::program& prog)
                 self(self, *comp.do_expr_);
                 return false;
             },
-            [&](ast::symbol_ref&) -> bool
+            [&](const auto&) -> bool
             {
                 return false;
             }
         }, ew.wrapped_);
     };
 
+    program_.const_int_memory_.reserve(256);
+    program_.const_float_memory_.reserve(256);
+    
     for (auto& decl : prog.declarations_)
-    {
-        hoist_visit(hoist_visit, decl.value_);
-    }
+        analyze_memory(analyze_memory, decl.value_);
 
-    program_.const_int_memory_size_ = program_.const_int_memory_.size();
-    program_.const_float_memory_size_ = program_.const_float_memory_.size();
+    auto finalize_const_spans = [&]<typename T>(
+        const std::vector<T>& memory,
+        const assembly::array_spans& spans,
+        std::vector<std::span<const T>>& memory_spans)
+    {
+        memory_spans.reserve(spans.size());
+        for (const auto& s : spans)
+        {
+            memory_spans.emplace_back(memory.data() + s.offset_, s.len_);
+        }
+    };
+    
+    finalize_const_spans(program_.const_int_memory_, program_.get_int_array_spans(memory_type::mem_const), program_.const_int_array_memory_spans_);
+    finalize_const_spans(program_.const_float_memory_, program_.get_float_array_spans(memory_type::mem_const), program_.const_float_array_memory_spans_);
 }
 
 bool translator::expect(bool condition, const ast::source_location& loc, const std::string& message)
@@ -190,9 +194,7 @@ void translator::compute_global_max_args()
             ++counts[static_cast<size_t>(rf)];
         }
         for (size_t i = 0; i < 4; ++i)
-        {
             max_per_file[i] = std::max(max_per_file[i], counts[i]);
-        }
     }
 
     global_max_args_ = 0;
@@ -230,10 +232,10 @@ void translator::emit_move_const_src(reg_file file, size_t dst_reg_idx, size_t s
             program_.instructions_.emplace_back(assembly::mov_f_reg_const{dst_reg_idx, src_const_idx});
             return;
         case reg_file::i_span:
-            program_.instructions_.emplace_back(assembly::smov_i_reg_const{dst_reg_idx, src_const_idx});
+            program_.instructions_.emplace_back(assembly::mov_is_reg_const{dst_reg_idx, src_const_idx});
             return;
         case reg_file::f_span:
-            program_.instructions_.emplace_back(assembly::smov_f_reg_const{dst_reg_idx, src_const_idx});
+            program_.instructions_.emplace_back(assembly::mov_fs_reg_const{dst_reg_idx, src_const_idx});
             return;
     }
     std::unreachable();
@@ -245,19 +247,15 @@ void translator::emit_move_reg_src(reg_file file, size_t dst_reg_idx, size_t src
     bool is_int    = (file == reg_file::i_scalar || file == reg_file::i_span);
 
     if (is_scalar)
-    {
         if (is_int)
             program_.instructions_.emplace_back(assembly::mov_i_reg_reg{dst_reg_idx, src_reg_idx});
         else
             program_.instructions_.emplace_back(assembly::mov_f_reg_reg{dst_reg_idx, src_reg_idx});
-    }
     else
-    {
         if (is_int)
-            program_.instructions_.emplace_back(assembly::smov_i_reg_reg{dst_reg_idx, src_reg_idx});
+            program_.instructions_.emplace_back(assembly::mov_is_reg_reg{dst_reg_idx, src_reg_idx});
         else
-            program_.instructions_.emplace_back(assembly::smov_f_reg_reg{dst_reg_idx, src_reg_idx});
-    }
+            program_.instructions_.emplace_back(assembly::mov_fs_reg_reg{dst_reg_idx, src_reg_idx});
 }
 
 void translator::emit_call(size_t proto_idx, reg_file res_reg_file, size_t res_reg_idx)
@@ -266,19 +264,15 @@ void translator::emit_call(size_t proto_idx, reg_file res_reg_file, size_t res_r
     bool is_int         = (res_reg_file == reg_file::i_scalar || res_reg_file == reg_file::i_span);
 
     if (returns_scalar)
-    {
         if (is_int)
             program_.instructions_.emplace_back(assembly::call_i{proto_idx, res_reg_idx});
         else
             program_.instructions_.emplace_back(assembly::call_f{proto_idx, res_reg_idx});
-    }
     else
-    {
         if (is_int)
             program_.instructions_.emplace_back(assembly::scall_i{proto_idx, res_reg_idx});
         else
             program_.instructions_.emplace_back(assembly::scall_f{proto_idx, res_reg_idx});
-    }
 }
 
 void translator::emit_expr(const ast::expr_wrapper& ew, reg_file target_reg_file, size_t target_reg_idx)
@@ -292,28 +286,34 @@ void translator::emit_expr(const ast::expr_wrapper& ew, reg_file target_reg_file
     std::visit(
         overloaded
         {
-            [this, target_reg_file, target_reg_idx, &ew](const ast::int_scalar& lit)
+            [&] (const ast::int_scalar& lit)
             {
                 if (!expect(lit.const_memory_idx_.has_value(), ew.loc_, "Missing hoisted constant index for integer literal"))
                     return;
 
                 emit_move_const_src(target_reg_file, target_reg_idx, *lit.const_memory_idx_);
             },
-            [this, target_reg_file, target_reg_idx, &ew](const ast::float_scalar& lit)
+            [&] (const ast::float_scalar& lit)
             {
                 if (!expect(lit.const_memory_idx_.has_value(), ew.loc_, "Missing hoisted constant index for float literal"))
                     return;
 
                 emit_move_const_src(target_reg_file, target_reg_idx, *lit.const_memory_idx_);
             },
-            [this, target_reg_file, target_reg_idx, &ew](const ast::array_construction& ac)
+            [&] (const ast::array_construction& ac)
             {
-                if (!expect(ac.const_memory_span_idx_.has_value(), ew.loc_, "Non-constant array construction not yet supported"))
+                if (!expect(ac.memory_annotation_.has_value(), ew.loc_, "Array construction has no associated memory span"))
                     return;
+                    
+                if (ac.memory_annotation_.value().type_ == memory_type::mem_const)
+                {
+                    emit_move_const_src(target_reg_file, target_reg_idx, ac.memory_annotation_.value().idx_);
+                    return;
+                }
 
-                emit_move_const_src(target_reg_file, target_reg_idx, *ac.const_memory_span_idx_);
+                translation_error(ew.loc_, "Mutable array constructions are not yet supported in code generation");
             },
-            [this, target_reg_file, target_reg_idx, &ew](const ast::symbol_ref& ref)
+            [&] (const ast::symbol_ref& ref)
             {
                 if (!expect(ref.declaration_idx_.has_value(), ew.loc_, "Internal error: unresolved symbol reference"))
                     return;
@@ -325,7 +325,7 @@ void translator::emit_expr(const ast::expr_wrapper& ew, reg_file target_reg_file
 
                 emit_move_reg_src(target_reg_file, target_reg_idx, src_reg_idx);
             },
-            [this, target_reg_file, target_reg_idx, &ew](const ast::f_call& call)
+            [&] (const ast::f_call& call)
             {
                 if (!expect(call.fn_.proto_idx_.has_value(), ew.loc_, "Unresolved function name in call"))
                     return;
@@ -353,11 +353,11 @@ void translator::emit_expr(const ast::expr_wrapper& ew, reg_file target_reg_file
 
                 emit_call(proto_idx, res_reg_file, target_reg_idx);
             },
-            [this, &ew](const ast::index_access&)
+            [&] (const ast::index_access&)
             {
                 translation_error(ew.loc_, "Index access not yet supported in code generation");
             },
-            [this, &ew](const ast::comprehension&)
+            [&] (const ast::comprehension&)
             {
                 translation_error(ew.loc_, "Array comprehension not yet supported in code generation");
             }
@@ -384,9 +384,7 @@ void translator::translate(const std::string& source)
     semantic_analyzer sa;
 
     for (const auto& func : functions_)
-    {
         sa.register_function_prototype(func.name_, func.proto_.arg_types_, func.proto_.arg_names_, func.proto_.return_type_);
-    }
 
     ast::program& prog = p.get_program();
     sa.analyze(prog);
@@ -398,8 +396,7 @@ void translator::translate(const std::string& source)
         return;
     }
 
-    compute_constant_pool_sizes(prog);
-    hoist_scalar_constants(prog);
+    prepare_memory_model(prog);
 
     compute_global_max_args();
     emit_declarations(prog);

@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "type.hpp"
+#include "memory_annotation.hpp"
 
 namespace lyrid
 {
@@ -32,13 +33,13 @@ struct identifier
 struct symbol_ref
 {
     identifier ident_;
-    std::optional<size_t> declaration_idx_;
+    std::optional<size_t> declaration_idx_ = std::nullopt;
 };
 
 struct fun_ref
 {
     identifier ident_;
-    std::optional<size_t> proto_idx_;
+    std::optional<size_t> proto_idx_ = std::nullopt;
 };
 
 struct f_call
@@ -56,7 +57,7 @@ struct index_access
 struct array_construction
 {
     std::vector<expr_wrapper> elements_;
-    std::optional<size_t> const_memory_span_idx_;
+    std::optional<memory_span_annotation> memory_annotation_ = std::nullopt;
 };
 
 struct comprehension
@@ -70,14 +71,14 @@ struct int_scalar
 {
     using value_type = int64_t;
     value_type value_;
-    std::optional<size_t> const_memory_idx_;
+    std::optional<size_t> const_memory_idx_ = std::nullopt;
 };
 
 struct float_scalar
 {
     using value_type = double;
     value_type value_;
-    std::optional<size_t> const_memory_idx_;
+    std::optional<size_t> const_memory_idx_ = std::nullopt;
 };
 
 using expr = std::variant<
@@ -94,7 +95,7 @@ struct expr_wrapper
 {
     expr wrapped_;
     source_location loc_;
-    std::optional<type> inferred_type_;
+    std::optional<type> inferred_type_ = std::nullopt;
 
     expr_wrapper(expr e, source_location l)
         : wrapped_(std::move(e)), loc_(std::move(l)) {}

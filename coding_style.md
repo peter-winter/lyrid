@@ -46,7 +46,7 @@ class y
 5. No one-liners
 
 ```c++```
-// correct
+// correct, preferred
 if (expr)
     do_stuff();
 
