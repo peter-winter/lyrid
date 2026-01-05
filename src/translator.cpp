@@ -7,6 +7,20 @@
 namespace lyrid
 {
 
+using namespace assembly;
+
+translator::reg_file translator::get_scalar_reg_file(scalar_type t)
+{
+    return std::visit(
+        overloaded
+        {
+            [](int_scalar_type) { return reg_file::i_scalar; },
+            [](float_scalar_type) { return reg_file::f_scalar; }
+        },
+        t
+    );  
+}
+
 translator::reg_file translator::get_span_reg_file(scalar_type t)
 {
     return std::visit(
@@ -30,6 +44,18 @@ translator::reg_file translator::get_reg_file(type t)
         },
         t
     );
+}
+
+translator::reg_file translator::to_scalar_reg_file(reg_file span_reg_file)
+{
+    switch (span_reg_file)
+    {
+        case reg_file::i_span:
+            return reg_file::i_scalar;
+        case reg_file::f_span:
+            return reg_file::f_scalar;
+    }
+    std::unreachable();
 }
 
 void translator::prepare_memory_model(ast::program& prog)
@@ -58,13 +84,13 @@ void translator::prepare_memory_model(ast::program& prog)
         );
     };
         
-    auto get_spans = [&] (scalar_type st, memory_type mt) -> assembly::array_spans&
+    auto get_spans = [&] (scalar_type st, memory_type mt) -> array_spans&
     {
         return std::visit(
             overloaded
             {
-                [&](int_scalar_type) -> assembly::array_spans& { return program_.get_int_array_spans(mt); },
-                [&](float_scalar_type) -> assembly::array_spans& { return program_.get_float_array_spans(mt); }
+                [&](int_scalar_type) -> array_spans& { return program_.get_int_array_spans(mt); },
+                [&](float_scalar_type) -> array_spans& { return program_.get_float_array_spans(mt); }
             },
             st
         );
@@ -110,7 +136,7 @@ void translator::prepare_memory_model(ast::program& prog)
                 auto& spans = get_spans(arr_type.sc_, mem_type);
                 size_t idx = spans.size();
                 size_t offset = all_const ? const_pool_offset : mutable_pool_size;
-                spans.emplace_back(assembly::span{offset, len});
+                spans.emplace_back(span{offset, len});
                 ac.memory_annotation_ = memory_span_annotation{ mem_type, idx };
                 
                 if (!all_const)
@@ -152,7 +178,7 @@ void translator::prepare_memory_model(ast::program& prog)
 
     auto finalize_const_spans = [&]<typename T>(
         const std::vector<T>& memory,
-        const assembly::array_spans& spans,
+        const array_spans& spans,
         std::vector<std::span<const T>>& memory_spans)
     {
         memory_spans.reserve(spans.size());
@@ -207,75 +233,224 @@ void translator::emit_declarations(const ast::program& prog)
     decl_regs_.clear();
     decl_regs_.reserve(should_be_more_than_enough_registers);
 
-    std::array<size_t, 4> next_reg{};
-    next_reg.fill(global_max_args_);
+    next_reg_.fill(global_max_args_);
 
     for (size_t i = 0; i < prog.declarations_.size(); ++i)
     {
         const auto& decl = prog.declarations_[i];
         reg_file rf = get_reg_file(decl.type_);
-        size_t reg_idx = next_reg[std::to_underlying(rf)]++;
+        size_t reg_idx = next_reg_[std::to_underlying(rf)]++;
         decl_regs_.emplace_back(rf, reg_idx);
 
-        emit_expr(decl.value_, rf, reg_idx);
+        emit_assignment(decl.value_, rf, reg_idx);
     }
 }
 
-void translator::emit_move_const_src(reg_file file, size_t dst_reg_idx, size_t src_const_idx)
+void translator::emit_mov_x_reg_const(reg_file file, reg_index dst_reg_idx, const_index src_const_idx)
 {
     switch (file)
     {
         case reg_file::i_scalar:
-            program_.instructions_.emplace_back(assembly::mov_i_reg_const{dst_reg_idx, src_const_idx});
+            program_.instructions_.emplace_back(mov_i_reg_const{dst_reg_idx, src_const_idx});
             return;
         case reg_file::f_scalar:
-            program_.instructions_.emplace_back(assembly::mov_f_reg_const{dst_reg_idx, src_const_idx});
+            program_.instructions_.emplace_back(mov_f_reg_const{dst_reg_idx, src_const_idx});
             return;
         case reg_file::i_span:
-            program_.instructions_.emplace_back(assembly::mov_is_reg_const{dst_reg_idx, src_const_idx});
+            program_.instructions_.emplace_back(mov_is_reg_const{dst_reg_idx, src_const_idx});
             return;
         case reg_file::f_span:
-            program_.instructions_.emplace_back(assembly::mov_fs_reg_const{dst_reg_idx, src_const_idx});
+            program_.instructions_.emplace_back(mov_fs_reg_const{dst_reg_idx, src_const_idx});
             return;
     }
     std::unreachable();
 }
 
-void translator::emit_move_reg_src(reg_file file, size_t dst_reg_idx, size_t src_reg_idx)
+void translator::emit_mov_x_reg_reg(reg_file file, reg_index dst_reg_idx, reg_index src_reg_idx)
 {
-    bool is_scalar = (file == reg_file::i_scalar || file == reg_file::f_scalar);
-    bool is_int    = (file == reg_file::i_scalar || file == reg_file::i_span);
-
-    if (is_scalar)
-        if (is_int)
-            program_.instructions_.emplace_back(assembly::mov_i_reg_reg{dst_reg_idx, src_reg_idx});
-        else
-            program_.instructions_.emplace_back(assembly::mov_f_reg_reg{dst_reg_idx, src_reg_idx});
-    else
-        if (is_int)
-            program_.instructions_.emplace_back(assembly::mov_is_reg_reg{dst_reg_idx, src_reg_idx});
-        else
-            program_.instructions_.emplace_back(assembly::mov_fs_reg_reg{dst_reg_idx, src_reg_idx});
+    switch (file)
+    {
+        case reg_file::i_scalar:
+            program_.instructions_.emplace_back(mov_i_reg_reg{dst_reg_idx, src_reg_idx});
+            return;
+        case reg_file::f_scalar:
+            program_.instructions_.emplace_back(mov_f_reg_reg{dst_reg_idx, src_reg_idx});
+            return;
+        case reg_file::i_span:
+            program_.instructions_.emplace_back(mov_is_reg_reg{dst_reg_idx, src_reg_idx});
+            return;
+        case reg_file::f_span:
+            program_.instructions_.emplace_back(mov_fs_reg_reg{dst_reg_idx, src_reg_idx});
+            return;
+    }
+    std::unreachable();
 }
 
-void translator::emit_call(size_t proto_idx, reg_file res_reg_file, size_t res_reg_idx)
+void translator::emit_mov_x_reg_mut(reg_file file, reg_index dst_reg_idx, span_index span_idx)
 {
-    bool returns_scalar = (res_reg_file == reg_file::i_scalar || res_reg_file == reg_file::f_scalar);
-    bool is_int         = (res_reg_file == reg_file::i_scalar || res_reg_file == reg_file::i_span);
-
-    if (returns_scalar)
-        if (is_int)
-            program_.instructions_.emplace_back(assembly::call_i{proto_idx, res_reg_idx});
-        else
-            program_.instructions_.emplace_back(assembly::call_f{proto_idx, res_reg_idx});
-    else
-        if (is_int)
-            program_.instructions_.emplace_back(assembly::scall_i{proto_idx, res_reg_idx});
-        else
-            program_.instructions_.emplace_back(assembly::scall_f{proto_idx, res_reg_idx});
+    switch (file)
+    {
+        case reg_file::i_span:
+            program_.instructions_.emplace_back(mov_is_reg_mut{dst_reg_idx, span_idx});
+            return;
+        case reg_file::f_span:
+            program_.instructions_.emplace_back(mov_fs_reg_mut{dst_reg_idx, span_idx});
+            return;
+    }
+    std::unreachable();
 }
 
-void translator::emit_expr(const ast::expr_wrapper& ew, reg_file target_reg_file, size_t target_reg_idx)
+void translator::emit_mov_x_mut_const(reg_file file, span_index span_idx, size_t offset, const_index src_const_idx)
+{
+    switch (file)
+    {
+        case reg_file::i_scalar:
+            program_.instructions_.emplace_back(mov_i_mut_const{span_idx, offset, src_const_idx});
+            return;
+        case reg_file::f_scalar:
+            program_.instructions_.emplace_back(mov_f_mut_const{span_idx, offset, src_const_idx});
+            return;
+    }
+    std::unreachable();
+}
+
+void translator::emit_mov_x_mut_reg(reg_file file, span_index span_idx, size_t offset, reg_index src_reg_idx)
+{
+    switch (file)
+    {
+        case reg_file::i_scalar:
+            program_.instructions_.emplace_back(mov_i_mut_reg{span_idx, offset, src_reg_idx});
+            return;
+        case reg_file::f_scalar:
+            program_.instructions_.emplace_back(mov_f_mut_reg{span_idx, offset, src_reg_idx});
+            return;
+    }
+    std::unreachable();
+}
+
+void translator::emit_call_reg(function_index proto_idx, reg_file res_reg_file, reg_index res_reg_idx)
+{
+    switch (res_reg_file)
+    {
+        case reg_file::i_scalar:
+            program_.instructions_.emplace_back(call_i_reg{proto_idx, res_reg_idx});
+            return;
+        case reg_file::f_scalar:
+            program_.instructions_.emplace_back(call_f_reg{proto_idx, res_reg_idx});
+            return;
+        case reg_file::i_span:
+            program_.instructions_.emplace_back(call_is_reg{proto_idx, res_reg_idx});
+            return;
+        case reg_file::f_span:
+            program_.instructions_.emplace_back(call_fs_reg{proto_idx, res_reg_idx});
+            return;
+    }
+    std::unreachable();
+}
+
+void translator::emit_call_mut(function_index proto_idx, reg_file res_reg_file, span_index span_idx, size_t offset)
+{
+    switch (res_reg_file)
+    {
+        case reg_file::i_scalar:
+            program_.instructions_.emplace_back(call_i_mut{proto_idx, span_idx, offset});
+            return;
+        case reg_file::f_scalar:
+            program_.instructions_.emplace_back(call_f_mut{proto_idx, span_idx, offset});
+            return;
+    }
+    std::unreachable();
+}
+
+void translator::emit_call_arguments(const ast::f_call& call, const prototype& proto)
+{
+    std::array<size_t, 4> arg_pos{0, 0, 0, 0};
+
+    for (ssize_t a = static_cast<ssize_t>(call.args_.size()) - 1; a >= 0; --a)
+    {
+        type arg_t = proto.arg_types_[a];
+        reg_file arg_reg_file = get_reg_file(arg_t);
+        size_t arg_reg_idx = arg_pos[std::to_underlying(arg_reg_file)]++;
+        emit_assignment(call.args_[a], arg_reg_file, arg_reg_idx);
+    }
+}
+
+std::optional<size_t> translator::emit_mutable_store(const ast::expr_wrapper& ew, reg_file target_scalar_reg_file, span_index mem_idx, size_t off, std::optional<size_t> temp_reg_idx)
+{
+    if (!expect(ew.inferred_type_.has_value(), ew.loc_, "Missing inferred type for expression in mutable array element"))
+        return temp_reg_idx;
+        
+    if (!expect(get_reg_file(*ew.inferred_type_) == target_scalar_reg_file, ew.loc_, "Expression type does not match target register file in mutable array element"))
+        return temp_reg_idx;
+                    
+    return std::visit(
+        overloaded
+        {
+            [&] (const ast::int_scalar& lit) -> std::optional<size_t>
+            {
+                if (!expect(lit.const_memory_idx_.has_value(), ew.loc_, "Missing hoisted constant index for integer literal in mutable array element"))
+                    return temp_reg_idx;
+                emit_mov_x_mut_const(target_scalar_reg_file, mem_idx, off, *lit.const_memory_idx_);
+                return temp_reg_idx;
+            },
+            [&] (const ast::float_scalar& lit) -> std::optional<size_t>
+            {
+                if (!expect(lit.const_memory_idx_.has_value(), ew.loc_, "Missing hoisted constant index for float literal in mutable array element"))
+                    return temp_reg_idx;
+                emit_mov_x_mut_const(target_scalar_reg_file, mem_idx, off, *lit.const_memory_idx_);
+                return temp_reg_idx;
+            },
+            [&] (const ast::symbol_ref& ref) -> std::optional<size_t>
+            {
+                if (!expect(ref.declaration_idx_.has_value(), ew.loc_, "Unresolved symbol reference in mutable array element"))
+                    return temp_reg_idx;
+
+                auto [src_reg_file, src_reg_idx] = decl_regs_[*ref.declaration_idx_];
+                
+                if (!expect(src_reg_file == target_scalar_reg_file, ew.loc_, "Register file mismatch with symbol reference in mutable array element"))
+                    return temp_reg_idx;
+                    
+                emit_mov_x_mut_reg(target_scalar_reg_file, mem_idx, off, src_reg_idx);
+                return temp_reg_idx;
+            },
+            [&] (const ast::f_call& call) -> std::optional<size_t>
+            {
+                if (!expect(call.fn_.proto_idx_.has_value(), ew.loc_, "Unresolved function name in function call within mutable array element"))
+                    return temp_reg_idx;
+
+                size_t proto_idx = *call.fn_.proto_idx_;
+
+                if (!expect(proto_idx < functions_.size(), ew.loc_, "Invalid prototype index in function call within mutable array element"))
+                    return temp_reg_idx;
+
+                const prototype& proto = functions_[proto_idx].proto_;
+                reg_file res_reg_file = get_reg_file(proto.return_type_);
+
+                if (!expect(res_reg_file == target_scalar_reg_file, ew.loc_, "Function return type does not match target scalar register file in mutable array element"))
+                    return temp_reg_idx;
+
+                emit_call_arguments(call, proto);
+                emit_call_mut(proto_idx, target_scalar_reg_file, mem_idx, off);
+                return temp_reg_idx;
+            },
+            [&] (const auto&) -> std::optional<size_t>
+            {
+                // index_access should work here, 
+                // array comprehension and array construction should not reach here (both not scalar)
+                
+                if (!temp_reg_idx.has_value())
+                    temp_reg_idx = next_reg_[std::to_underlying(target_scalar_reg_file)]++;
+                    
+                emit_assignment(ew, target_scalar_reg_file, *temp_reg_idx);
+                emit_mov_x_mut_reg(target_scalar_reg_file, mem_idx, off, *temp_reg_idx);
+                return temp_reg_idx;
+            }
+        },
+        ew.wrapped_
+    );
+}
+
+void translator::emit_assignment(const ast::expr_wrapper& ew, reg_file target_reg_file, size_t target_reg_idx)
 {
     if (!expect(ew.inferred_type_.has_value(), ew.loc_, "Missing inferred type for expression"))
         return;
@@ -291,39 +466,54 @@ void translator::emit_expr(const ast::expr_wrapper& ew, reg_file target_reg_file
                 if (!expect(lit.const_memory_idx_.has_value(), ew.loc_, "Missing hoisted constant index for integer literal"))
                     return;
 
-                emit_move_const_src(target_reg_file, target_reg_idx, *lit.const_memory_idx_);
+                emit_mov_x_reg_const(target_reg_file, target_reg_idx, *lit.const_memory_idx_);
             },
             [&] (const ast::float_scalar& lit)
             {
                 if (!expect(lit.const_memory_idx_.has_value(), ew.loc_, "Missing hoisted constant index for float literal"))
                     return;
 
-                emit_move_const_src(target_reg_file, target_reg_idx, *lit.const_memory_idx_);
+                emit_mov_x_reg_const(target_reg_file, target_reg_idx, *lit.const_memory_idx_);
             },
             [&] (const ast::array_construction& ac)
             {
                 if (!expect(ac.memory_annotation_.has_value(), ew.loc_, "Array construction has no associated memory span"))
                     return;
                     
-                if (ac.memory_annotation_.value().type_ == memory_type::mem_const)
+                const memory_span_annotation& annot = *ac.memory_annotation_;
+                span_index mem_idx = annot.idx_;
+                memory_type mt = annot.type_;
+                                
+                if (mt == memory_type::mem_const)
                 {
-                    emit_move_const_src(target_reg_file, target_reg_idx, ac.memory_annotation_.value().idx_);
+                    emit_mov_x_reg_const(target_reg_file, target_reg_idx, mem_idx);
                     return;
                 }
+                else
+                {
+                    std::optional<size_t> temp_reg_idx;
 
-                translation_error(ew.loc_, "Mutable array constructions are not yet supported in code generation");
+                    for (size_t off = 0; off < ac.elements_.size(); ++off)
+                    {
+                        const ast::expr_wrapper& elem = ac.elements_[off];
+                        reg_file scalar_rf = to_scalar_reg_file(target_reg_file);
+                        temp_reg_idx = emit_mutable_store(elem, scalar_rf, mem_idx, off, temp_reg_idx);
+                    }
+
+                    emit_mov_x_reg_mut(target_reg_file, target_reg_idx, mem_idx);
+                }
             },
             [&] (const ast::symbol_ref& ref)
             {
-                if (!expect(ref.declaration_idx_.has_value(), ew.loc_, "Internal error: unresolved symbol reference"))
+                if (!expect(ref.declaration_idx_.has_value(), ew.loc_, "Unresolved symbol reference"))
                     return;
 
                 auto [src_reg_file, src_reg_idx] = decl_regs_[*ref.declaration_idx_];
 
-                if (!expect(src_reg_file == target_reg_file, ew.loc_, "Internal error: register file mismatch in symbol reference"))
+                if (!expect(src_reg_file == target_reg_file, ew.loc_, "Register file mismatch in symbol reference"))
                     return;
 
-                emit_move_reg_src(target_reg_file, target_reg_idx, src_reg_idx);
+                emit_mov_x_reg_reg(target_reg_file, target_reg_idx, src_reg_idx);
             },
             [&] (const ast::f_call& call)
             {
@@ -341,17 +531,8 @@ void translator::emit_expr(const ast::expr_wrapper& ew, reg_file target_reg_file
                 if (!expect(res_reg_file == target_reg_file, ew.loc_, "Function return type does not match target register file"))
                     return;
 
-                std::array<size_t, 4> arg_pos{0, 0, 0, 0};
-
-                for (ssize_t a = static_cast<ssize_t>(call.args_.size()) - 1; a >= 0; --a)
-                {
-                    type arg_t = proto.arg_types_[a];
-                    reg_file arg_reg_file = get_reg_file(arg_t);
-                    size_t arg_reg_idx = arg_pos[static_cast<size_t>(arg_reg_file)]++;
-                    emit_expr(call.args_[a], arg_reg_file, arg_reg_idx);
-                }
-
-                emit_call(proto_idx, res_reg_file, target_reg_idx);
+                emit_call_arguments(call, proto);
+                emit_call_reg(proto_idx, res_reg_file, target_reg_idx);
             },
             [&] (const ast::index_access&)
             {
@@ -369,7 +550,7 @@ void translator::emit_expr(const ast::expr_wrapper& ew, reg_file target_reg_file
 void translator::translate(const std::string& source)
 {
     errors_.clear();
-    program_ = assembly::program{};
+    program_ = program{};
 
     parser p;
     p.parse(source);

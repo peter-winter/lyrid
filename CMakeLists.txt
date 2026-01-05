@@ -39,7 +39,8 @@ add_executable(lyrid_parser_tests
     tests/test_semantics_valid.cpp
     tests/test_semantics_invalid.cpp
     tests/test_translator_constants.cpp
-    tests/test_translator_codegen.cpp
+    tests/test_translator_codegen_simple.cpp
+    tests/test_translator_codegen_mutable_array.cpp
 )
 
 target_include_directories(lyrid_parser_tests

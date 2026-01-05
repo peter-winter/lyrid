@@ -61,8 +61,10 @@ private:
     
     enum class reg_file : size_t { i_scalar = 0, f_scalar = 1, i_span = 2, f_span = 3 };
     
+    static reg_file get_scalar_reg_file(scalar_type t);
     static reg_file get_span_reg_file(scalar_type t);
     static reg_file get_reg_file(type t);
+    static reg_file to_scalar_reg_file(reg_file span_reg_file);
     
     void translation_error(const ast::source_location& loc, const std::string& message);
     bool expect(bool condition, const ast::source_location& loc, const std::string& message);
@@ -70,16 +72,23 @@ private:
     void compute_global_max_args();
 
     void emit_declarations(const ast::program& prog);
-    void emit_expr(const ast::expr_wrapper& ew, reg_file target_reg_file, size_t target_reg_idx);
-    void emit_move_const_src(reg_file file, size_t dst_reg_idx, size_t src_const_idx);
-    void emit_move_reg_src(reg_file file, size_t dst_reg_idx, size_t src_reg_idx);
-    void emit_call(size_t proto_idx, reg_file res_reg_file, size_t res_reg_idx);
+    void emit_assignment(const ast::expr_wrapper& ew, reg_file target_reg_file, assembly::reg_index target_reg_idx);
+    std::optional<size_t> emit_mutable_store(const ast::expr_wrapper& ew, reg_file target_scalar_reg_file, assembly::span_index mem_idx, size_t off, std::optional<size_t> temp_reg_idx);
+    void emit_mov_x_reg_const(reg_file file, assembly::reg_index dst_reg_idx, assembly::const_index src_const_idx);
+    void emit_mov_x_reg_reg(reg_file file, assembly::reg_index dst_reg_idx, assembly::reg_index src_reg_idx);
+    void emit_mov_x_reg_mut(reg_file file, assembly::reg_index dst_reg_idx, assembly::span_index span_idx);
+    void emit_mov_x_mut_const(reg_file file, assembly::span_index span_idx, size_t offset, assembly::const_index src_const_idx);
+    void emit_mov_x_mut_reg(reg_file file, assembly::span_index span_idx, size_t offset, assembly::reg_index src_reg_idx);
+    void emit_call_reg(assembly::function_index proto_idx, reg_file res_reg_file, assembly::reg_index res_reg_idx);
+    void emit_call_mut(assembly::function_index proto_idx, reg_file res_reg_file, assembly::span_index span_idx, size_t offset);
+    void emit_call_arguments(const ast::f_call& call, const prototype& proto);
     
     std::vector<std::string> errors_;
     std::vector<function> functions_;
     assembly::program program_;
     size_t global_max_args_ = 0;
     std::vector<std::pair<reg_file, size_t>> decl_regs_;
+    std::array<size_t, 4> next_reg_{};
 };
 
 }

@@ -14,8 +14,10 @@ namespace assembly
 
 using reg_index = size_t;
 using const_index = size_t;
-using function_id = size_t;
+using function_index = size_t;
+using span_index = size_t;  // Alias for indices into the mutable/constant span tables
 
+// Scalar moves — integer
 struct mov_i_reg_reg
 {
     reg_index dst_;
@@ -28,6 +30,7 @@ struct mov_i_reg_const
     const_index src_;
 };
 
+// Scalar moves — float
 struct mov_f_reg_reg
 {
     reg_index dst_;
@@ -40,6 +43,7 @@ struct mov_f_reg_const
     const_index src_;
 };
 
+// Span moves — integer arrays
 struct mov_is_reg_reg
 {
     reg_index dst_;
@@ -49,9 +53,31 @@ struct mov_is_reg_reg
 struct mov_is_reg_const
 {
     reg_index dst_;
-    const_index src_;
+    span_index span_idx_;
 };
 
+struct mov_is_reg_mut
+{
+    reg_index dst_;
+    span_index span_idx_;
+};
+
+// Mutable stores — integer elements (into mutable memory)
+struct mov_i_mut_const
+{
+    span_index span_idx_;
+    size_t offset_;
+    const_index const_src_;
+};
+
+struct mov_i_mut_reg
+{
+    span_index span_idx_;
+    size_t offset_;
+    reg_index src_;
+};
+
+// Span moves — float arrays
 struct mov_fs_reg_reg
 {
     reg_index dst_;
@@ -61,9 +87,31 @@ struct mov_fs_reg_reg
 struct mov_fs_reg_const
 {
     reg_index dst_;
-    const_index src_;
+    span_index span_idx_;
 };
 
+struct mov_fs_reg_mut
+{
+    reg_index dst_;
+    span_index span_idx_;
+};
+
+// Mutable stores — float elements (into mutable memory)
+struct mov_f_mut_const
+{
+    span_index span_idx_;
+    size_t offset_;
+    const_index const_src_;
+};
+
+struct mov_f_mut_reg
+{
+    span_index span_idx_;
+    size_t offset_;
+    reg_index src_;
+};
+
+// Control flow — jumps
 struct jmp
 {
     size_t target_index_;
@@ -97,48 +145,91 @@ struct jmp_eq_f_reg_const
     size_t target_index_;
 };
 
-struct call_i
+// Function calls — scalar-returning
+struct call_i_reg
 {
-    function_id id_;
+    function_index id_;
     reg_index res_;
 };
 
-struct call_f
+struct call_f_reg
 {
-    function_id id_;
+    function_index id_;
     reg_index res_;
 };
 
-struct scall_i
+// Function calls — scalar-returning, storing in mutable memory
+struct call_i_mut
 {
-    function_id id_;
+    function_index id_;
+    span_index span_idx_;
+    size_t offset_;
+};
+
+struct call_f_mut
+{
+    function_index id_;
+    span_index span_idx_;
+    size_t offset_;
+};
+
+// Function calls — span-returning (array-returning)
+struct call_is_reg
+{
+    function_index id_;
     reg_index res_;
 };
 
-struct scall_f
+struct call_fs_reg
 {
-    function_id id_;
+    function_index id_;
     reg_index res_;
 };
+
 
 using instruction = std::variant<
+    // Scalar moves — integer
     mov_i_reg_reg,
     mov_i_reg_const,
+
+    // Scalar moves — float
     mov_f_reg_reg,
     mov_f_reg_const,
+
+    // Span moves — integer arrays
     mov_is_reg_reg,
     mov_is_reg_const,
+    mov_is_reg_mut,
+
+    // Mutable stores — integer elements
+    mov_i_mut_const,
+    mov_i_mut_reg,
+
+    // Span moves — float arrays
     mov_fs_reg_reg,
     mov_fs_reg_const,
+    mov_fs_reg_mut,
+
+    // Mutable stores — float elements
+    mov_f_mut_const,
+    mov_f_mut_reg,
+
+    // Control flow — jumps
     jmp,
     jmp_eq_i_reg_reg,
     jmp_eq_i_reg_const,
     jmp_eq_f_reg_reg,
     jmp_eq_f_reg_const,
-    call_i,
-    call_f,
-    scall_i,
-    scall_f
+
+    // Function calls — scalar-returning
+    call_i_reg,
+    call_f_reg,
+    call_i_mut,
+    call_f_mut,
+    
+    // Function calls — span-returning
+    call_is_reg,
+    call_fs_reg
 >;
 
 using const_int_memory = std::vector<int64_t>;
