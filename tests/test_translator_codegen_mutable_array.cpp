@@ -28,8 +28,8 @@ int[] a = [x, y]
     REQUIRE(ins.size() == 5);
     require<mov_i_reg_const>(0, ins, 0, 0);  // decl x: i_scalar reg 0 <- const 0
     require<mov_i_reg_const>(1, ins, 1, 1);  // decl y: i_scalar reg 1 <- const 1
-    require<mov_i_mut_reg>(2, ins, 0, 0, 0);  // a[0] = x (from i_scalar reg 0)
-    require<mov_i_mut_reg>(3, ins, 0, 1, 1);  // a[1] = y (from i_scalar reg 1)
+    require<store_i_reg>(2, ins, 0, 0, 0);  // a[0] = x (from i_scalar reg 0)
+    require<store_i_reg>(3, ins, 0, 1, 1);  // a[1] = y (from i_scalar reg 1)
     require<mov_is_reg_mut>(4, ins, 0, 0);  // decl a: i_span reg 0 <- mutable span 0
 
     REQUIRE(t.get_mutable_int_memory_size() == 2);
@@ -60,9 +60,9 @@ int[] arr = [1, x, 3]
 
     REQUIRE(ins.size() == 5);
     require<mov_i_reg_const>(0, ins, 0, 0);  // decl x: i_scalar reg 0 <- const 0
-    require<mov_i_mut_const>(1, ins, 0, 0, 1);  // arr[0] = 1
-    require<mov_i_mut_reg>(2, ins, 0, 1, 0);  // arr[1] = x
-    require<mov_i_mut_const>(3, ins, 0, 2, 2);  // arr[2] = 3
+    require<store_i_const>(1, ins, 0, 0, 1);  // arr[0] = 1
+    require<store_i_reg>(2, ins, 0, 1, 0);  // arr[1] = x
+    require<store_i_const>(3, ins, 0, 2, 2);  // arr[2] = 3
     require<mov_is_reg_mut>(4, ins, 0, 0);  // decl arr: i_span reg 0 <- mutable span 0
 
     REQUIRE(t.get_mutable_int_memory_size() == 3);
@@ -95,7 +95,7 @@ int[] arr = [twice(base), base]
     require<mov_i_reg_const>(0, ins, 1, 0);  // decl base: i_scalar reg 1 <- const 0 (reservation=1)
     require<mov_i_reg_reg>(1, ins, 0, 1);  // arg setup: move base to arg pos 0
     require<call_i_mut>(2, ins, 0, 0, 0);  // call twice → store directly into arr[0]
-    require<mov_i_mut_reg>(3, ins, 0, 1, 1);  // arr[1] = base (from decl reg 1)
+    require<store_i_reg>(3, ins, 0, 1, 1);  // arr[1] = base (from decl reg 1)
     require<mov_is_reg_mut>(4, ins, 1, 0);  // decl arr: i_span reg 1 <- mutable span 0
 
     REQUIRE(t.get_mutable_int_memory_size() == 2);
@@ -157,9 +157,9 @@ float[] arr = [1.0, x, 3.0]
 
     REQUIRE(ins.size() == 5);
     require<mov_f_reg_const>(0, ins, 0, 0);  // decl x
-    require<mov_f_mut_const>(1, ins, 0, 0, 1);  // arr[0]
-    require<mov_f_mut_reg>(2, ins, 0, 1, 0);  // arr[1]
-    require<mov_f_mut_const>(3, ins, 0, 2, 2);  // arr[2]
+    require<store_f_const>(1, ins, 0, 0, 1);  // arr[0]
+    require<store_f_reg>(2, ins, 0, 1, 0);  // arr[1]
+    require<store_f_const>(3, ins, 0, 2, 2);  // arr[2]
     require<mov_fs_reg_mut>(4, ins, 0, 0);  // decl arr
 
     REQUIRE(t.get_mutable_float_memory_size() == 3);

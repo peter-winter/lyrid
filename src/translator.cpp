@@ -300,29 +300,29 @@ void translator::emit_mov_x_reg_mut(reg_file file, reg_index dst_reg_idx, span_i
     std::unreachable();
 }
 
-void translator::emit_mov_x_mut_const(reg_file file, span_index span_idx, size_t offset, const_index src_const_idx)
+void translator::emit_store_x_const(reg_file file, span_index span_idx, size_t offset, const_index src_const_idx)
 {
     switch (file)
     {
         case reg_file::i_scalar:
-            program_.instructions_.emplace_back(mov_i_mut_const{span_idx, offset, src_const_idx});
+            program_.instructions_.emplace_back(store_i_const{span_idx, offset, src_const_idx});
             return;
         case reg_file::f_scalar:
-            program_.instructions_.emplace_back(mov_f_mut_const{span_idx, offset, src_const_idx});
+            program_.instructions_.emplace_back(store_f_const{span_idx, offset, src_const_idx});
             return;
     }
     std::unreachable();
 }
 
-void translator::emit_mov_x_mut_reg(reg_file file, span_index span_idx, size_t offset, reg_index src_reg_idx)
+void translator::emit_store_x_reg(reg_file file, span_index span_idx, size_t offset, reg_index src_reg_idx)
 {
     switch (file)
     {
         case reg_file::i_scalar:
-            program_.instructions_.emplace_back(mov_i_mut_reg{span_idx, offset, src_reg_idx});
+            program_.instructions_.emplace_back(store_i_reg{span_idx, offset, src_reg_idx});
             return;
         case reg_file::f_scalar:
-            program_.instructions_.emplace_back(mov_f_mut_reg{span_idx, offset, src_reg_idx});
+            program_.instructions_.emplace_back(store_f_reg{span_idx, offset, src_reg_idx});
             return;
     }
     std::unreachable();
@@ -417,14 +417,14 @@ std::optional<size_t> translator::emit_mutable_store(const ast::expr_wrapper& ew
             {
                 if (!expect(lit.const_memory_idx_.has_value(), ew.loc_, "Missing hoisted constant index for integer literal in mutable array element"))
                     return temp_reg_idx;
-                emit_mov_x_mut_const(target_scalar_reg_file, mem_idx, off, *lit.const_memory_idx_);
+                emit_store_x_const(target_scalar_reg_file, mem_idx, off, *lit.const_memory_idx_);
                 return temp_reg_idx;
             },
             [&] (const ast::float_scalar& lit) -> std::optional<size_t>
             {
                 if (!expect(lit.const_memory_idx_.has_value(), ew.loc_, "Missing hoisted constant index for float literal in mutable array element"))
                     return temp_reg_idx;
-                emit_mov_x_mut_const(target_scalar_reg_file, mem_idx, off, *lit.const_memory_idx_);
+                emit_store_x_const(target_scalar_reg_file, mem_idx, off, *lit.const_memory_idx_);
                 return temp_reg_idx;
             },
             [&] (const ast::symbol_ref& ref) -> std::optional<size_t>
@@ -437,7 +437,7 @@ std::optional<size_t> translator::emit_mutable_store(const ast::expr_wrapper& ew
                 if (!expect(src_reg_file == target_scalar_reg_file, ew.loc_, "Register file mismatch with symbol reference in mutable array element"))
                     return temp_reg_idx;
                     
-                emit_mov_x_mut_reg(target_scalar_reg_file, mem_idx, off, src_reg_idx);
+                emit_store_x_reg(target_scalar_reg_file, mem_idx, off, src_reg_idx);
                 return temp_reg_idx;
             },
             [&] (const ast::f_call& call) -> std::optional<size_t>
@@ -469,7 +469,7 @@ std::optional<size_t> translator::emit_mutable_store(const ast::expr_wrapper& ew
                     temp_reg_idx = next_reg_[std::to_underlying(target_scalar_reg_file)]++;
                     
                 emit_assignment(ew, target_scalar_reg_file, *temp_reg_idx);
-                emit_mov_x_mut_reg(target_scalar_reg_file, mem_idx, off, *temp_reg_idx);
+                emit_store_x_reg(target_scalar_reg_file, mem_idx, off, *temp_reg_idx);
                 return temp_reg_idx;
             }
         },

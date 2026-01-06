@@ -78,22 +78,22 @@ struct mov_is_reg_mut
 };
 
 // Mutable stores — integer elements (into mutable memory)
-struct mov_i_mut_const
+struct store_i_const
 {
     span_index span_idx_;
     size_t offset_;
     const_index const_src_;
     
-    constexpr static auto args = std::tuple{&mov_i_mut_const::span_idx_, &mov_i_mut_const::offset_, &mov_i_mut_const::const_src_};
+    constexpr static auto args = std::tuple{&store_i_const::span_idx_, &store_i_const::offset_, &store_i_const::const_src_};
 };
 
-struct mov_i_mut_reg
+struct store_i_reg
 {
     span_index span_idx_;
     size_t offset_;
     reg_index src_;
     
-    constexpr static auto args = std::tuple{&mov_i_mut_reg::span_idx_, &mov_i_mut_reg::offset_, &mov_i_mut_reg::src_};
+    constexpr static auto args = std::tuple{&store_i_reg::span_idx_, &store_i_reg::offset_, &store_i_reg::src_};
 };
 
 // Span moves — float arrays
@@ -122,22 +122,22 @@ struct mov_fs_reg_mut
 };
 
 // Mutable stores — float elements (into mutable memory)
-struct mov_f_mut_const
+struct store_f_const
 {
     span_index span_idx_;
     size_t offset_;
     const_index const_src_;
     
-    constexpr static auto args = std::tuple{&mov_f_mut_const::span_idx_, &mov_f_mut_const::offset_, &mov_f_mut_const::const_src_};
+    constexpr static auto args = std::tuple{&store_f_const::span_idx_, &store_f_const::offset_, &store_f_const::const_src_};
 };
 
-struct mov_f_mut_reg
+struct store_f_reg
 {
     span_index span_idx_;
     size_t offset_;
     reg_index src_;
     
-    constexpr static auto args = std::tuple{&mov_f_mut_reg::span_idx_, &mov_f_mut_reg::offset_, &mov_f_mut_reg::src_};
+    constexpr static auto args = std::tuple{&store_f_reg::span_idx_, &store_f_reg::offset_, &store_f_reg::src_};
 };
 
 // Control flow — jumps
@@ -251,8 +251,8 @@ using instruction = std::variant<
     mov_is_reg_mut,
 
     // Mutable stores — integer elements
-    mov_i_mut_const,
-    mov_i_mut_reg,
+    store_i_const,
+    store_i_reg,
 
     // Span moves — float arrays
     mov_fs_reg_reg,
@@ -260,8 +260,8 @@ using instruction = std::variant<
     mov_fs_reg_mut,
 
     // Mutable stores — float elements
-    mov_f_mut_const,
-    mov_f_mut_reg,
+    store_f_const,
+    store_f_reg,
 
     // Control flow — jumps
     jmp,

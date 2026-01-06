@@ -77,8 +77,8 @@ private:
     void emit_mov_x_reg_const(reg_file file, assembly::reg_index dst_reg_idx, assembly::const_index src_const_idx);
     void emit_mov_x_reg_reg(reg_file file, assembly::reg_index dst_reg_idx, assembly::reg_index src_reg_idx);
     void emit_mov_x_reg_mut(reg_file file, assembly::reg_index dst_reg_idx, assembly::span_index span_idx);
-    void emit_mov_x_mut_const(reg_file file, assembly::span_index span_idx, size_t offset, assembly::const_index src_const_idx);
-    void emit_mov_x_mut_reg(reg_file file, assembly::span_index span_idx, size_t offset, assembly::reg_index src_reg_idx);
+    void emit_store_x_const(reg_file file, assembly::span_index span_idx, size_t offset, assembly::const_index src_const_idx);
+    void emit_store_x_reg(reg_file file, assembly::span_index span_idx, size_t offset, assembly::reg_index src_reg_idx);
     void emit_call_reg(assembly::function_index proto_idx, reg_file res_reg_file, assembly::reg_index res_reg_idx);
     void emit_call_mut(assembly::function_index proto_idx, reg_file res_reg_file, assembly::span_index span_idx, size_t offset);
     void emit_call_arguments(const ast::f_call& call, const prototype& proto);
