@@ -333,25 +333,73 @@ std::optional<type> parser::parse_type()
     std::string kw = std::move(kw_opt->first);
     source_location kw_loc = kw_opt->second;
 
-    bool is_array = match('[');
-
-    if (is_array)
-    {
-        expect(']', "Expected ']' after '[' in array type");
-    }
-
+    scalar_type sc_type;
     if (kw == "int")
     {
-        return is_array ? type(array_type(int_scalar_type{})) : type(int_scalar_type{});
+        sc_type = int_scalar_type{};
     }
-
-    if (kw == "float")
+    else if (kw == "float")
     {
-        return is_array ? type(array_type(float_scalar_type{})) : type(float_scalar_type{});
+        sc_type = float_scalar_type{};
+    }
+    else
+    {
+        error(kw_loc, "Unknown type '" + kw + "'; expected 'int' or 'float'");
+        return {};
     }
 
-    error(kw_loc, "Unknown type '" + kw + "'; expected 'int' or 'float'");
-    return {};
+    if (match('['))
+    {
+        std::optional<size_t> fixed_length = std::nullopt;
+        
+        // Check for inferred length: empty [...]
+        if (match(']'))
+        {
+            return type(array_type{sc_type, fixed_length});
+        }
+        else
+        {
+            // Parse explicit positive integer length
+            size_t len_start_line = line_;
+            size_t len_start_column = column_;
+
+            std::string len_str;
+            while (std::isdigit(static_cast<unsigned char>(peek())))
+            {
+                len_str += advance();
+            }
+
+            if (len_str.empty())
+            {
+                error({line_, column_}, "Expected positive integer literal for fixed array length or ']' for inferred length");
+            }
+            else
+            {
+                try
+                {
+                    size_t len = std::stoull(len_str);
+                    if (len == 0)
+                    {
+                        error({len_start_line, len_start_column}, "Fixed array length must be positive");
+                    }
+                    else
+                    {
+                        fixed_length = len;
+                    }
+                }
+                catch (...)
+                {
+                    error({len_start_line, len_start_column}, "Invalid fixed array length literal");
+                }
+            }
+
+            expect(']', "Expected ']' after fixed array length");
+            return type(array_type{sc_type, fixed_length});
+        }
+        
+    }
+    else
+        return type(std::visit([](auto t) -> type { return t; }, sc_type));
 }
 
 std::optional<std::vector<expr_wrapper>> parser::parse_arg_list()
@@ -668,7 +716,7 @@ std::optional<expr_wrapper> parser::parse_primary()
             
             source_location call_loc{primary_start_line, primary_start_column};
             fun_ref fname{std::move(ident), std::nullopt};
-            f_call call{std::move(fname), std::move(*args_opt), false};
+            f_call call{std::move(fname), std::move(*args_opt)};
             return expr_wrapper(expr(std::move(call)), call_loc);
         }
 

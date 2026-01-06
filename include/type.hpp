@@ -28,11 +28,12 @@ inline bool operator == (scalar_type t1, scalar_type t2)
 struct array_type
 {
     scalar_type sc_;
+    std::optional<size_t> fixed_length_ = std::nullopt;
 };
 
 inline bool operator == (array_type a1, array_type a2)
 {
-    return a1.sc_ == a2.sc_;
+    return a1.sc_ == a2.sc_ && a1.fixed_length_ == a2.fixed_length_;
 }
 
 using type = std::variant<array_type, float_scalar_type, int_scalar_type>;
@@ -59,13 +60,13 @@ inline bool is_scalar_type(type t)
     return !is_array_type(t);
 }
 
-inline type to_array_type(type t)
+inline type to_array_type(type t, size_t size)
 {
     return std::visit(
         overloaded
         {
-            [](int_scalar_type i) { return type(array_type{i}); },
-            [](float_scalar_type f) { return type(array_type{f}); },
+            [&](int_scalar_type i) { return type(array_type{i, size}); },
+            [&](float_scalar_type f) { return type(array_type{f, size}); },
             [](array_type x) { return type(x); }
         },
         t

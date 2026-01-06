@@ -8,7 +8,6 @@
 #include <optional>
 
 #include "type.hpp"
-#include "memory_annotation.hpp"
 
 namespace lyrid
 {
@@ -22,8 +21,6 @@ struct source_location
     size_t column_;
 };
 
-struct expr_wrapper;
-
 struct identifier
 {
     std::string value_;
@@ -33,32 +30,50 @@ struct identifier
 struct symbol_ref
 {
     identifier ident_;
-    std::optional<size_t> declaration_idx_ = std::nullopt;
+    std::optional<size_t> declaration_idx_;
 };
 
 struct fun_ref
 {
     identifier ident_;
-    std::optional<size_t> proto_idx_ = std::nullopt;
+    std::optional<size_t> proto_idx_;
 };
+
+struct scalar_offset
+{
+    size_t value_;
+};
+
+struct span_offset
+{
+    size_t value_;
+};
+
+using storage_annotation = std::variant<scalar_offset, span_offset>;
+
+struct expr_wrapper;
 
 struct f_call
 {
     fun_ref fn_;
     std::vector<expr_wrapper> args_;
-    bool is_flat_ = true;
+
+    std::optional<storage_annotation> result_storage_;
 };
 
 struct index_access
 {
     std::unique_ptr<expr_wrapper> base_;
     std::unique_ptr<expr_wrapper> index_;
+
+    std::optional<size_t> scalar_offset_in_memory_;
 };
 
 struct array_construction
 {
     std::vector<expr_wrapper> elements_;
-    std::optional<memory_span_annotation> memory_annotation_ = std::nullopt;
+
+    std::optional<size_t> span_offset_in_int_memory_;
 };
 
 struct comprehension
@@ -66,20 +81,24 @@ struct comprehension
     std::vector<identifier> variables_;
     std::vector<expr_wrapper> in_exprs_;
     std::unique_ptr<expr_wrapper> do_expr_;
+
+    std::optional<size_t> span_offset_in_int_memory_;
 };
 
 struct int_scalar
 {
     using value_type = int64_t;
     value_type value_;
-    std::optional<size_t> const_memory_idx_ = std::nullopt;
+
+    std::optional<size_t> scalar_offset_in_int_memory_;
 };
 
 struct float_scalar
 {
     using value_type = double;
     value_type value_;
-    std::optional<size_t> const_memory_idx_ = std::nullopt;
+
+    std::optional<size_t> scalar_offset_in_float_memory_;
 };
 
 using expr = std::variant<
@@ -96,10 +115,7 @@ struct expr_wrapper
 {
     expr wrapped_;
     source_location loc_;
-    std::optional<type> inferred_type_ = std::nullopt;
-
-    expr_wrapper(expr e, source_location l)
-        : wrapped_(std::move(e)), loc_(std::move(l)) {}
+    std::optional<type> inferred_type_;
 };
 
 struct declaration

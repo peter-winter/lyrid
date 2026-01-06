@@ -15,6 +15,16 @@ void semantic_analyzer::error(const ast::source_location& loc, const std::string
     errors_.emplace_back(prefix + message);
 }
 
+void semantic_analyzer::process_array_type_in_function_prototype(type t, const std::string& name)
+{
+    if (is_array_type(t))
+    {
+        if (!std::get<array_type>(t).fixed_length_.has_value())
+            throw std::invalid_argument(
+                "Array fixed length in type missing for function prototype '" + name + "'");
+    }
+}
+
 void semantic_analyzer::register_function_prototype(
     const std::string& name,
     std::vector<type> arg_types,
@@ -27,6 +37,11 @@ void semantic_analyzer::register_function_prototype(
             "Number of argument types and names must match for function prototype '" + name + "'");
     }
 
+    process_array_type_in_function_prototype(return_type, name);
+    
+    for (const type& t : arg_types)
+        process_array_type_in_function_prototype(t, name);
+    
     prototype proto{std::move(arg_types), std::move(arg_names), return_type};
     prototypes_.push_back(std::move(proto));
     prototype_map_[name] = prototypes_.size() - 1;
@@ -49,7 +64,11 @@ std::string semantic_analyzer::type_to_string(type t) const
         overloaded
         {
             [&](auto sc) { return scalar_type_to_string(sc); },
-            [&](array_type ar) { return scalar_type_to_string(ar.sc_) + "[]"; }
+            [&](array_type ar)
+            {
+                std::string len = std::to_string(ar.fixed_length_.value_or(0));
+                return scalar_type_to_string(ar.sc_) + "[" + len + "]";
+            }
         },
     t);
 }
@@ -110,7 +129,6 @@ void semantic_analyzer::analyze(program& prog)
                     return {};
                 }
     
-                bool potentially_flat = true;
                 for (size_t i = 0; i < call.args_.size(); ++i)
                 {
                     auto& arg = call.args_[i];
@@ -132,15 +150,7 @@ void semantic_analyzer::analyze(program& prog)
                               "' but got '" + type_to_string(*arg_type) + "'");
                         return {};
                     }
-                    
-                    potentially_flat = potentially_flat && std::visit(
-                        overloaded
-                        {
-                            [](const auto&) { return true; },
-                            [](const f_call&) { return false; }
-                        }, arg.wrapped_);
                 }
-                call.is_flat_ = potentially_flat;
                 
                 return wrapper.inferred_type_ = proto.return_type_;
             },
@@ -213,7 +223,7 @@ void semantic_analyzer::analyze(program& prog)
                     }
                 }
 
-                return wrapper.inferred_type_ = to_array_type(*elem_type);
+                return wrapper.inferred_type_ = to_array_type(*elem_type, ac.elements_.size());
             },
             [this, &wrapper, &current_scope, &self](comprehension& comp) -> std::optional<type>
             {
@@ -226,6 +236,7 @@ void semantic_analyzer::analyze(program& prog)
                 }
 
                 std::vector<type> elem_types;
+                size_t max_arr_size = 0;
                 for (auto& src : comp.in_exprs_)
                 {
                     std::optional<type> src_type = self(self, src, current_scope);
@@ -240,7 +251,13 @@ void semantic_analyzer::analyze(program& prog)
                         return {};
                     }
                     
-                    type elem_t = get_element_type(std::get<array_type>(*src_type));
+                    array_type at = std::get<array_type>(*src_type);
+                    type elem_t = get_element_type(at);
+                    
+                    if (!at.fixed_length_.has_value())
+                        error(src.loc_, "Internal error. Comprehension source has no fixed length");
+                        
+                    max_arr_size = std::max(max_arr_size, at.fixed_length_.value_or(0));
                     elem_types.push_back(elem_t);
                 }
 
@@ -272,7 +289,7 @@ void semantic_analyzer::analyze(program& prog)
                     return {};
                 }
 
-                return wrapper.inferred_type_ = to_array_type(*body_type);
+                return wrapper.inferred_type_ = to_array_type(*body_type, max_arr_size);
             },
         }, wrapper.wrapped_);
     };
@@ -290,7 +307,20 @@ void semantic_analyzer::analyze(program& prog)
 
         std::optional<type> expr_type = analyze_expr(analyze_expr, decl.value_, global_scope);
 
-        if (expr_type && *expr_type != decl.type_)
+        if (!expr_type)
+            continue;
+            
+        if (is_array_type(decl.type_) && is_array_type(*expr_type))
+        {
+            array_type expr_at = std::get<array_type>(*expr_type);
+            array_type& decl_at = std::get<array_type>(decl.type_);
+            if (expr_at.fixed_length_.has_value() && !decl_at.fixed_length_.has_value())
+            {
+                decl_at.fixed_length_ = expr_at.fixed_length_;
+            }
+        }
+        
+        if (*expr_type != decl.type_)
         {
             error(decl.value_.loc_,
                   "Type mismatch in declaration of '" + name +

@@ -10,7 +10,7 @@
 
 using namespace lyrid;
 using namespace lyrid::assembly;
-
+/*
 template<typename Ins, typename... Args>
 inline void require(size_t idx, const instructions& ins, Args... args)
 {
@@ -21,3 +21,4 @@ inline void require(size_t idx, const instructions& ins, Args... args)
     auto test = [&]<size_t... I>(std::index_sequence<I...>) { (test_one(I, m.*(std::get<I>(Ins::args)), args), ...); };
     test(std::make_index_sequence<sizeof...(args)>{});
 }
+*/

@@ -241,6 +241,72 @@ TEST_CASE("Invalid declaration: missing type keyword, starts with punctuation (t
     REQUIRE(prog.declarations_.empty());
 }
 
+TEST_CASE("Invalid: unclosed bracket after fixed length digits", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int[5 arr = []");
+
+    const auto& errors = p.get_errors();
+
+    REQUIRE(!errors.empty());
+    REQUIRE(errors[0] == "Error [1, 7]: Expected ']' after fixed array length");
+}
+
+TEST_CASE("Invalid: no digits after open square bracket in fixed length context", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int[a] arr = []");
+
+    const auto& errors = p.get_errors();
+
+    REQUIRE(!errors.empty());
+    REQUIRE("Error [1, 5]: Expected positive integer literal for fixed array length or ']' for inferred length");
+}
+
+TEST_CASE("Invalid: fixed array length of zero)", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int[0] arr = []");
+
+    const auto& errors = p.get_errors();
+
+    REQUIRE(!errors.empty());
+    REQUIRE("Error [1, 5]: Fixed array length must be positive");
+}
+
+TEST_CASE("Invalid: non-digit characters after digits in fixed length", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int[5a] arr = []");
+
+    const auto& errors = p.get_errors();
+
+    REQUIRE(!errors.empty());
+    REQUIRE("Error [1, 5]: Expected ']' after fixed array length");
+}
+
+TEST_CASE("Invalid: overflow in fixed length literal", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int[999999999999999999999999999999999] arr = []");
+
+    const auto& errors = p.get_errors();
+
+    REQUIRE(!errors.empty());
+    REQUIRE("Error [1, 5]: Invalid fixed array length literal");
+}
+
+TEST_CASE("Invalid: negative fixed length attempt parsed as no digits", "[parser][invalid]")
+{
+    parser p;
+    p.parse("int[-5] arr = []");
+
+    const auto& errors = p.get_errors();
+
+    REQUIRE(!errors.empty());
+    REQUIRE("Error [1, 5]: Expected positive integer literal for fixed array length or ']' for inferred length");
+}
+
 TEST_CASE("Parser recovery: skips malformed declaration line (generic error branch)", "[parser][invalid]")
 {
     parser p;

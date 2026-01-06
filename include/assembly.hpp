@@ -2,416 +2,68 @@
 
 #include <variant>
 #include <vector>
-#include <span>
 #include <cstddef>
-#include <utility>
-#include <tuple>
 
-namespace lyrid
+namespace lyrid::assembly
 {
 
-namespace assembly
-{
+struct int_pool {};
+struct float_pool {};
 
-using reg_index = size_t;
-using const_index = size_t;
-using function_index = size_t;
-using span_index = size_t;  // Alias for indices into the mutable/constant span tables
+using pool = std::variant<int_pool, float_pool>;
 
-// Scalar moves — integer
-struct mov_i_reg_reg
+// Scalar move: copy a single element between offsets in the same pool
+struct move_scalar
 {
-    reg_index dst_;
-    reg_index src_;
-    
-    constexpr static auto args = std::tuple{&mov_i_reg_reg::dst_, &mov_i_reg_reg::src_};
-};
-
-struct mov_i_reg_const
-{
-    reg_index dst_;
-    const_index src_;
-    
-    constexpr static auto args = std::tuple{&mov_i_reg_const::dst_, &mov_i_reg_const::src_};
-};
-
-// Scalar moves — float
-struct mov_f_reg_reg
-{
-    reg_index dst_;
-    reg_index src_;
-    
-    constexpr static auto args = std::tuple{&mov_f_reg_reg::dst_, &mov_f_reg_reg::src_};
-};
-
-struct mov_f_reg_const
-{
-    reg_index dst_;
-    const_index src_;
-    
-    constexpr static auto args = std::tuple{&mov_f_reg_const::dst_, &mov_f_reg_const::src_};
-};
-
-// Span moves — integer arrays
-struct mov_is_reg_reg
-{
-    reg_index dst_;
-    reg_index src_;
-    
-    constexpr static auto args = std::tuple{&mov_is_reg_reg::dst_, &mov_is_reg_reg::src_};
-};
-
-struct mov_is_reg_const
-{
-    reg_index dst_;
-    span_index span_idx_;
-    
-    constexpr static auto args = std::tuple{&mov_is_reg_const::dst_, &mov_is_reg_const::span_idx_};
-};
-
-struct mov_is_reg_mut
-{
-    reg_index dst_;
-    span_index span_idx_;
-    
-    constexpr static auto args = std::tuple{&mov_is_reg_mut::dst_, &mov_is_reg_mut::span_idx_};
-};
-
-// Span moves — float arrays
-struct mov_fs_reg_reg
-{
-    reg_index dst_;
-    reg_index src_;
-    
-    constexpr static auto args = std::tuple{&mov_fs_reg_reg::dst_, &mov_fs_reg_reg::src_};
-};
-
-struct mov_fs_reg_const
-{
-    reg_index dst_;
-    span_index span_idx_;
-    
-    constexpr static auto args = std::tuple{&mov_fs_reg_const::dst_, &mov_fs_reg_const::span_idx_};
-};
-
-struct mov_fs_reg_mut
-{
-    reg_index dst_;
-    span_index span_idx_;
-    
-    constexpr static auto args = std::tuple{&mov_fs_reg_mut::dst_, &mov_fs_reg_mut::span_idx_};
-};
-
-// Mutable scalar stores — integer elements
-struct store_i_const
-{
-    span_index span_idx_;
-    size_t offset_;
-    const_index const_src_;
-    
-    constexpr static auto args = std::tuple{&store_i_const::span_idx_, &store_i_const::offset_, &store_i_const::const_src_};
-};
-
-struct store_i_reg
-{
-    span_index span_idx_;
-    size_t offset_;
-    reg_index src_;
-    
-    constexpr static auto args = std::tuple{&store_i_reg::span_idx_, &store_i_reg::offset_, &store_i_reg::src_};
-};
-
-// Mutable scalar stores — float elements
-struct store_f_const
-{
-    span_index span_idx_;
-    size_t offset_;
-    const_index const_src_;
-    
-    constexpr static auto args = std::tuple{&store_f_const::span_idx_, &store_f_const::offset_, &store_f_const::const_src_};
-};
-
-struct store_f_reg
-{
-    span_index span_idx_;
-    size_t offset_;
-    reg_index src_;
-    
-    constexpr static auto args = std::tuple{&store_f_reg::span_idx_, &store_f_reg::offset_, &store_f_reg::src_};
-};
-
-// Scalar loads — integer arrays (from span to register)
-struct load_i_reg_const
-{
-    span_index span_idx_;
-    size_t offset_;
-    reg_index dst_;
-    
-    constexpr static auto args = std::tuple{&load_i_reg_const::span_idx_, &load_i_reg_const::offset_, &load_i_reg_const::dst_};
-};
-
-struct load_i_reg_mut
-{
-    span_index span_idx_;
-    size_t offset_;
-    reg_index dst_;
-    
-    constexpr static auto args = std::tuple{&load_i_reg_mut::span_idx_, &load_i_reg_mut::offset_, &load_i_reg_mut::dst_};
-};
-
-// Scalar loads — float arrays (from span to register)
-struct load_f_reg_const
-{
-    span_index span_idx_;
-    size_t offset_;
-    reg_index dst_;
-    
-    constexpr static auto args = std::tuple{&load_f_reg_const::span_idx_, &load_f_reg_const::offset_, &load_f_reg_const::dst_};
-};
-
-struct load_f_reg_mut
-{
-    span_index span_idx_;
-    size_t offset_;
-    reg_index dst_;
-    
-    constexpr static auto args = std::tuple{&load_f_reg_mut::span_idx_, &load_f_reg_mut::offset_, &load_f_reg_mut::dst_};
-};
-
-// Element copies — integer (span element to mutable span element)
-struct load_i_mut_const
-{
-    span_index dst_span_idx_;
+    pool pool_;
     size_t dst_offset_;
-    span_index src_span_idx_;
     size_t src_offset_;
-    
-    constexpr static auto args = std::tuple{&load_i_mut_const::dst_span_idx_, &load_i_mut_const::dst_offset_, &load_i_mut_const::src_span_idx_, &load_i_mut_const::src_offset_};
 };
 
-struct load_i_mut_mut
+struct move_scalar_indirect
 {
-    span_index dst_span_idx_;
-    size_t dst_offset_;
-    span_index src_span_idx_;
-    size_t src_offset_;
-    
-    constexpr static auto args = std::tuple{&load_i_mut_mut::dst_span_idx_, &load_i_mut_mut::dst_offset_, &load_i_mut_mut::src_span_idx_, &load_i_mut_mut::src_offset_};
+    pool pool_;                          // Target data pool (int_pool or float_pool)
+    size_t span_offset_in_int_memory_;   // Offset to span pair (data_offset + length)
+    size_t index_offset_in_int_memory_;  // Offset to runtime index scalar (int64_t)
+    size_t dst_offset_;                  // Destination scalar offset in the specified pool
 };
 
-// Element copies — float (span element to mutable span element)
-struct load_f_mut_const
+// Argument abstractions for calls
+struct scalar_arg
 {
-    span_index dst_span_idx_;
-    size_t dst_offset_;
-    span_index src_span_idx_;
-    size_t src_offset_;
-    
-    constexpr static auto args = std::tuple{&load_f_mut_const::dst_span_idx_, &load_f_mut_const::dst_offset_, &load_f_mut_const::src_span_idx_, &load_f_mut_const::src_offset_};
+    pool pool_;      // pool containing the array data
+    size_t offset_;  // offset in the specified pool to the scalar value
 };
 
-struct load_f_mut_mut
+struct span_arg
 {
-    span_index dst_span_idx_;
-    size_t dst_offset_;
-    span_index src_span_idx_;
-    size_t src_offset_;
-    
-    constexpr static auto args = std::tuple{&load_f_mut_mut::dst_span_idx_, &load_f_mut_mut::dst_offset_, &load_f_mut_mut::src_span_idx_, &load_f_mut_mut::src_offset_};
+    pool pool_;           // pool containing the array data
+    size_t span_offset_;  // offset in int_memory to the span pair (offset + length)
 };
 
-// Control flow — jumps
-struct jmp
+using arg = std::variant<scalar_arg, span_arg>;
+
+// Call instruction: invokes an external function with typed arguments and a single return value
+struct call
 {
-    size_t target_index_;
-    
-    constexpr static auto args = std::tuple{&jmp::target_index_};
+    size_t func_idx_;
+    std::vector<arg> args_;   // input arguments (passed by memory offsets)
+    arg return_;              // return: scalar or pre-allocated span in memory
 };
 
-struct jmp_eq_i_reg_reg
-{
-    reg_index lhs_;
-    reg_index rhs_;
-    size_t target_index_;
-    
-    constexpr static auto args = std::tuple{&jmp_eq_i_reg_reg::lhs_, &jmp_eq_i_reg_reg::rhs_, &jmp_eq_i_reg_reg::target_index_};
-};
-
-struct jmp_eq_i_reg_const
-{
-    reg_index lhs_;
-    const_index rhs_;
-    size_t target_index_;
-    
-    constexpr static auto args = std::tuple{&jmp_eq_i_reg_const::lhs_, &jmp_eq_i_reg_const::rhs_, &jmp_eq_i_reg_const::target_index_};
-};
-
-struct jmp_eq_f_reg_reg
-{
-    reg_index lhs_;
-    reg_index rhs_;
-    size_t target_index_;
-    
-    constexpr static auto args = std::tuple{&jmp_eq_f_reg_reg::lhs_, &jmp_eq_f_reg_reg::rhs_, &jmp_eq_f_reg_reg::target_index_};
-};
-
-struct jmp_eq_f_reg_const
-{
-    reg_index lhs_;
-    const_index rhs_;
-    size_t target_index_;
-    
-    constexpr static auto args = std::tuple{&jmp_eq_f_reg_const::lhs_, &jmp_eq_f_reg_const::rhs_, &jmp_eq_f_reg_const::target_index_};
-};
-
-// Function calls — scalar-returning
-struct call_i_reg
-{
-    function_index id_;
-    reg_index res_;
-    
-    constexpr static auto args = std::tuple{&call_i_reg::id_, &call_i_reg::res_};
-};
-
-struct call_f_reg
-{
-    function_index id_;
-    reg_index res_;
-    
-    constexpr static auto args = std::tuple{&call_f_reg::id_, &call_f_reg::res_};
-};
-
-struct call_i_mut
-{
-    function_index id_;
-    span_index span_idx_;
-    size_t offset_;
-    
-    constexpr static auto args = std::tuple{&call_i_mut::id_, &call_i_mut::span_idx_, &call_i_mut::offset_};
-};
-
-struct call_f_mut
-{
-    function_index id_;
-    span_index span_idx_;
-    size_t offset_;
-    
-    constexpr static auto args = std::tuple{&call_f_mut::id_, &call_f_mut::span_idx_, &call_f_mut::offset_};
-};
-
-// Function calls — span-returning (array-returning)
-struct call_is_reg
-{
-    function_index id_;
-    reg_index res_;
-    
-    constexpr static auto args = std::tuple{&call_is_reg::id_, &call_is_reg::res_};
-};
-
-struct call_fs_reg
-{
-    function_index id_;
-    reg_index res_;
-    
-    constexpr static auto args = std::tuple{&call_fs_reg::id_, &call_fs_reg::res_};
-};
 
 using instruction = std::variant<
-    // Scalar moves — integer
-    mov_i_reg_reg,
-    mov_i_reg_const,
-
-    // Scalar moves — float
-    mov_f_reg_reg,
-    mov_f_reg_const,
-
-    // Span moves — integer arrays
-    mov_is_reg_reg,
-    mov_is_reg_const,
-    mov_is_reg_mut,
-
-    // Span moves — float arrays
-    mov_fs_reg_reg,
-    mov_fs_reg_const,
-    mov_fs_reg_mut,
-
-    // Mutable stores — integer elements
-    store_i_const,
-    store_i_reg,
-    
-    // Mutable stores — float elements
-    store_f_const,
-    store_f_reg,
-
-    // Scalar loads — integer arrays
-    load_i_reg_const,
-    load_i_reg_mut,
-
-    // Scalar loads — float arrays
-    load_f_reg_const,
-    load_f_reg_mut,
-
-    // Element copies — integer
-    load_i_mut_const,
-    load_i_mut_mut,
-
-    // Element copies — float
-    load_f_mut_const,
-    load_f_mut_mut,
-    
-    // Control flow — jumps
-    jmp,
-    jmp_eq_i_reg_reg,
-    jmp_eq_i_reg_const,
-    jmp_eq_f_reg_reg,
-    jmp_eq_f_reg_const,
-
-    // Function calls — scalar-returning
-    call_i_reg,
-    call_f_reg,
-    call_i_mut,
-    call_f_mut,
-    
-    // Function calls — span-returning
-    call_is_reg,
-    call_fs_reg
+    move_scalar,
+    move_scalar_indirect,
+    call
 >;
-
-using const_int_memory = std::vector<int64_t>;
-using const_float_memory = std::vector<double>;
-using const_int_spans = std::vector<std::span<const int64_t>>;
-using const_float_spans = std::vector<std::span<const double>>;
-
-struct span
-{
-    size_t offset_;
-    size_t len_;
-};
-
-using array_spans = std::vector<span>;
-using instructions = std::vector<instruction>;
 
 struct program
 {
-    instructions instructions_;
+    std::vector<instruction> instructions_;
 
-    size_t mutable_int_memory_size_ = 0;
-    size_t mutable_float_memory_size_ = 0;
-    
-    const_int_memory const_int_memory_;
-    const_float_memory const_float_memory_;
-    const_int_spans const_int_array_memory_spans_;
-    const_float_spans const_float_array_memory_spans_;
-
-    array_spans int_array_spans_[2];
-    array_spans float_array_spans_[2];
-    
-    const auto& get_int_array_spans(memory_type mt) const { return int_array_spans_[std::to_underlying(mt)]; }
-    const auto& get_float_array_spans(memory_type mt) const { return float_array_spans_[std::to_underlying(mt)]; }
-    auto& get_int_array_spans(memory_type mt) { return int_array_spans_[std::to_underlying(mt)]; }
-    auto& get_float_array_spans(memory_type mt) { return float_array_spans_[std::to_underlying(mt)]; }
+    std::vector<int64_t> int_memory_;    // Contains scalars, array elements, and all span metadata
+    std::vector<double> float_memory_;   // Contains float scalars and array elements only
 };
-
-}
 
 }

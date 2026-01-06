@@ -28,11 +28,11 @@ int[] res = [|i| in |src| do 42]
 
     const auto& decl_res = prog.declarations_[1];
     REQUIRE(decl_res.value_.inferred_type_.has_value());
-    REQUIRE(decl_res.value_.inferred_type_.value() == array_type{int_scalar_type{}});
+    REQUIRE(decl_res.value_.inferred_type_.value() == array_type{int_scalar_type{}, 3});
 
     const auto& comp = std::get<comprehension>(decl_res.value_.wrapped_);
     REQUIRE(comp.in_exprs_[0].inferred_type_.has_value());
-    REQUIRE(comp.in_exprs_[0].inferred_type_.value() == array_type{int_scalar_type{}});
+    REQUIRE(comp.in_exprs_[0].inferred_type_.value() == array_type{int_scalar_type{}, 3});
     REQUIRE(comp.do_expr_->inferred_type_.has_value());
     REQUIRE(comp.do_expr_->inferred_type_.value() == int_scalar_type{});
 
@@ -46,7 +46,7 @@ TEST_CASE("Semantic valid: comprehension with multiple sources using variable fr
     parser p;
     p.parse(R"(
 int[] ints = [1, 2]
-float[] floats = [3.0, 4.0]
+float[] floats = [3.0, 4.0, 6.7]
 float[] res = [|i, f| in |ints, floats| do f]
 )");
 
@@ -62,13 +62,13 @@ float[] res = [|i, f| in |ints, floats| do f]
 
     const auto& decl_res = prog.declarations_[2];
     REQUIRE(decl_res.value_.inferred_type_.has_value());
-    REQUIRE(decl_res.value_.inferred_type_.value() == array_type{float_scalar_type{}});
+    REQUIRE(decl_res.value_.inferred_type_.value() == array_type{float_scalar_type{}, 3});
 
     const auto& comp = std::get<comprehension>(decl_res.value_.wrapped_);
     REQUIRE(comp.in_exprs_[0].inferred_type_.has_value());
-    REQUIRE(comp.in_exprs_[0].inferred_type_.value() == array_type{int_scalar_type{}});
+    REQUIRE(comp.in_exprs_[0].inferred_type_.value() == array_type{int_scalar_type{}, 2});
     REQUIRE(comp.in_exprs_[1].inferred_type_.has_value());
-    REQUIRE(comp.in_exprs_[1].inferred_type_.value() == array_type{float_scalar_type{}});
+    REQUIRE(comp.in_exprs_[1].inferred_type_.value() == array_type{float_scalar_type{}, 3});
     REQUIRE(comp.do_expr_->inferred_type_.has_value());
     REQUIRE(comp.do_expr_->inferred_type_.value() == float_scalar_type{});
 
@@ -152,14 +152,14 @@ TEST_CASE("Semantic valid: function call returning array used in declaration", "
 {
     parser p;
     p.parse(R"(
-int[] arr = create_int_array(5)
+int[2] arr = create_int_array(5)
 )");
 
     const auto& parse_errors = p.get_errors();
     REQUIRE(parse_errors.empty());
 
     semantic_analyzer sa;
-    sa.register_function_prototype("create_int_array", {int_scalar_type{}}, {"size"}, array_type{int_scalar_type{}});
+    sa.register_function_prototype("create_int_array", {int_scalar_type{}}, {"size"}, array_type{int_scalar_type{}, 2});
 
     program& prog = p.get_program();
     sa.analyze(prog);
@@ -169,7 +169,7 @@ int[] arr = create_int_array(5)
 
     const auto& decl_arr = prog.declarations_[0];
     REQUIRE(decl_arr.value_.inferred_type_.has_value());
-    REQUIRE(decl_arr.value_.inferred_type_.value() == array_type{int_scalar_type{}});
+    REQUIRE(decl_arr.value_.inferred_type_.value() == array_type{int_scalar_type{}, 2});
 
     const auto& call = std::get<f_call>(decl_arr.value_.wrapped_);
     REQUIRE(call.fn_.proto_idx_.has_value());
@@ -198,7 +198,7 @@ float[] res = [|i| in |src| do scale(i)]
 
     const auto& decl_res = prog.declarations_[1];
     REQUIRE(decl_res.value_.inferred_type_.has_value());
-    REQUIRE(decl_res.value_.inferred_type_.value() == array_type{float_scalar_type{}});
+    REQUIRE(decl_res.value_.inferred_type_.value() == array_type{float_scalar_type{}, 3});
 
     const auto& comp = std::get<comprehension>(decl_res.value_.wrapped_);
     const auto& call = std::get<f_call>(comp.do_expr_->wrapped_);
@@ -279,9 +279,9 @@ int[] res = [|i| in |a| do bar([|j| in |b| do foo(i, j)])]
     REQUIRE(parse_errors.empty());
 
     semantic_analyzer sa;
-    // Register prototypes to make the program semantically valid
+    
     sa.register_function_prototype("foo", {int_scalar_type{}, int_scalar_type{}}, {"x", "y"}, int_scalar_type{});
-    sa.register_function_prototype("bar", {array_type{int_scalar_type{}}}, {"arr"}, int_scalar_type{});
+    sa.register_function_prototype("bar", {array_type{int_scalar_type{}, 3}}, {"arr"}, int_scalar_type{});
 
     program& prog = p.get_program();
     sa.analyze(prog);
@@ -292,7 +292,7 @@ int[] res = [|i| in |a| do bar([|j| in |b| do foo(i, j)])]
     // res is the third declaration
     const auto& decl_res = prog.declarations_[2];
     REQUIRE(decl_res.value_.inferred_type_.has_value());
-    REQUIRE(decl_res.value_.inferred_type_.value() == array_type{int_scalar_type{}});
+    REQUIRE(decl_res.value_.inferred_type_.value() == array_type{int_scalar_type{}, 3});
 
     // Outer comprehension
     const auto& outer_comp = std::get<comprehension>(decl_res.value_.wrapped_);
@@ -336,7 +336,7 @@ int[] res = [|i| in |a| do bar([|j| in |b| do foo(i, j)])]
     REQUIRE(inner_comp.do_expr_->inferred_type_.value() == int_scalar_type{});  // foo returns scalar
 
     REQUIRE(bar_call.args_[0].inferred_type_.has_value());
-    REQUIRE(bar_call.args_[0].inferred_type_.value() == array_type{int_scalar_type{}});  // inner comprehension
+    REQUIRE(bar_call.args_[0].inferred_type_.value() == array_type{int_scalar_type{}, 3});  // inner comprehension
 
     REQUIRE(outer_comp.do_expr_->inferred_type_.has_value());
     REQUIRE(outer_comp.do_expr_->inferred_type_.value() == int_scalar_type{});  // bar returns scalar

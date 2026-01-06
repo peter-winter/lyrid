@@ -29,6 +29,8 @@ public:
     const std::vector<std::string>& get_errors() const { return errors_; }
 
 private:
+    void process_array_type_in_function_prototype(type t, const std::string& name);
+    
     struct scope_entry
     {
         std::optional<size_t> decl_index_;

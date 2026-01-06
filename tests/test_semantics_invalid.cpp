@@ -30,6 +30,26 @@ int x = arr[idx]
     REQUIRE(sem_errors[0] == "Error [4, 13]: Array index must be of type 'int', but got 'float'");
 }
 
+TEST_CASE("Semantic error: fixed length mismatch", "[semantics][error]")
+{
+    parser p;
+    p.parse(R"(
+int[2] arr = [1, 2, 3]
+)");
+
+    const auto& parse_errors = p.get_errors();
+    REQUIRE(parse_errors.empty());
+
+    semantic_analyzer sa;
+    program& prog = p.get_program();
+    sa.analyze(prog);
+
+    REQUIRE(!sa.is_valid());
+    const auto& sem_errors = sa.get_errors();
+    REQUIRE(sem_errors.size() == 1);
+    REQUIRE(sem_errors[0] == "Error [2, 14]: Type mismatch in declaration of 'arr': declared as 'int[2]' but expression has type 'int[3]'");
+}
+
 TEST_CASE("Semantic error: mixed types in array construction", "[semantics][error]")
 {
     parser p;
@@ -64,7 +84,7 @@ int[] outer = [inner]
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
     REQUIRE(sem_errors.size() == 1);
-    REQUIRE(sem_errors[0] == "Error [3, 16]: Array construction elements must be scalar types, but got 'int[]'");
+    REQUIRE(sem_errors[0] == "Error [3, 16]: Array construction elements must be scalar types, but got 'int[2]'");
 }
 
 TEST_CASE("Semantic error: comprehension infers mismatched array element type", "[semantics][error]")
@@ -85,7 +105,7 @@ float[] res = [|i| in |src| do 42]
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
     REQUIRE(sem_errors.size() == 1);
-    REQUIRE(sem_errors[0] == "Error [3, 15]: Type mismatch in declaration of 'res': declared as 'float[]' but expression has type 'int[]'");
+    REQUIRE(sem_errors[0] == "Error [3, 15]: Type mismatch in declaration of 'res': declared as 'float[3]' but expression has type 'int[3]'");
 }
 
 TEST_CASE("Semantic error: call to undefined function", "[semantics][error]")
@@ -281,7 +301,7 @@ int[] res = [|i| in |src| do inner]
     REQUIRE(!sa.is_valid());
     const auto& sem_errors = sa.get_errors();
     REQUIRE(sem_errors.size() == 1);
-    REQUIRE(sem_errors[0] == "Error [4, 30]: 'do' expression in array comprehension must be a scalar type, got 'int[]'");
+    REQUIRE(sem_errors[0] == "Error [4, 30]: 'do' expression in array comprehension must be a scalar type, got 'int[2]'");
 }
 
 TEST_CASE("Semantic error: duplicate variable in comprehension", "[semantics][error]")

@@ -38,6 +38,36 @@ TEST_CASE("Single int declaration", "[parser][valid]")
     REQUIRE(std::get<int_scalar>(decl.value_.wrapped_).value_ == 42);
 }
 
+TEST_CASE("Parsing valid declaration with explicit fixed array length", "[parser][valid]")
+{
+    parser p;
+    p.parse("int[4] values = [100, 200, 300, 400]\n"
+            "float[2] coeffs = [1.5, -2.0]");
+
+    const program& prog = p.get_program();
+    const auto& errors = p.get_errors();
+
+    REQUIRE(errors.empty());
+    REQUIRE(prog.is_valid());
+    REQUIRE(prog.declarations_.size() == 2);
+
+    // First declaration: int[4] values = [100, 200, 300, 400]
+    const declaration& decl0 = prog.declarations_[0];
+    REQUIRE(std::holds_alternative<array_type>(decl0.type_));
+    const array_type& arr_ty0 = std::get<array_type>(decl0.type_);
+    REQUIRE(std::holds_alternative<int_scalar_type>(arr_ty0.sc_));
+    REQUIRE(arr_ty0.fixed_length_.has_value());
+    REQUIRE(arr_ty0.fixed_length_.value() == 4);
+
+    // Second declaration: float[2] coeffs = [1.5, -2.0]
+    const declaration& decl1 = prog.declarations_[1];
+    REQUIRE(std::holds_alternative<array_type>(decl1.type_));
+    const array_type& arr_ty1 = std::get<array_type>(decl1.type_);
+    REQUIRE(std::holds_alternative<float_scalar_type>(arr_ty1.sc_));
+    REQUIRE(arr_ty1.fixed_length_.has_value());
+    REQUIRE(arr_ty1.fixed_length_.value() == 2);
+}
+
 TEST_CASE("Function call with arguments", "[parser][valid]")
 {
     parser p;
