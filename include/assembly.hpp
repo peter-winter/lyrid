@@ -77,25 +77,6 @@ struct mov_is_reg_mut
     constexpr static auto args = std::tuple{&mov_is_reg_mut::dst_, &mov_is_reg_mut::span_idx_};
 };
 
-// Mutable stores — integer elements (into mutable memory)
-struct store_i_const
-{
-    span_index span_idx_;
-    size_t offset_;
-    const_index const_src_;
-    
-    constexpr static auto args = std::tuple{&store_i_const::span_idx_, &store_i_const::offset_, &store_i_const::const_src_};
-};
-
-struct store_i_reg
-{
-    span_index span_idx_;
-    size_t offset_;
-    reg_index src_;
-    
-    constexpr static auto args = std::tuple{&store_i_reg::span_idx_, &store_i_reg::offset_, &store_i_reg::src_};
-};
-
 // Span moves — float arrays
 struct mov_fs_reg_reg
 {
@@ -121,7 +102,26 @@ struct mov_fs_reg_mut
     constexpr static auto args = std::tuple{&mov_fs_reg_mut::dst_, &mov_fs_reg_mut::span_idx_};
 };
 
-// Mutable stores — float elements (into mutable memory)
+// Mutable scalar stores — integer elements
+struct store_i_const
+{
+    span_index span_idx_;
+    size_t offset_;
+    const_index const_src_;
+    
+    constexpr static auto args = std::tuple{&store_i_const::span_idx_, &store_i_const::offset_, &store_i_const::const_src_};
+};
+
+struct store_i_reg
+{
+    span_index span_idx_;
+    size_t offset_;
+    reg_index src_;
+    
+    constexpr static auto args = std::tuple{&store_i_reg::span_idx_, &store_i_reg::offset_, &store_i_reg::src_};
+};
+
+// Mutable scalar stores — float elements
 struct store_f_const
 {
     span_index span_idx_;
@@ -138,6 +138,86 @@ struct store_f_reg
     reg_index src_;
     
     constexpr static auto args = std::tuple{&store_f_reg::span_idx_, &store_f_reg::offset_, &store_f_reg::src_};
+};
+
+// Scalar loads — integer arrays (from span to register)
+struct load_i_reg_const
+{
+    span_index span_idx_;
+    size_t offset_;
+    reg_index dst_;
+    
+    constexpr static auto args = std::tuple{&load_i_reg_const::span_idx_, &load_i_reg_const::offset_, &load_i_reg_const::dst_};
+};
+
+struct load_i_reg_mut
+{
+    span_index span_idx_;
+    size_t offset_;
+    reg_index dst_;
+    
+    constexpr static auto args = std::tuple{&load_i_reg_mut::span_idx_, &load_i_reg_mut::offset_, &load_i_reg_mut::dst_};
+};
+
+// Scalar loads — float arrays (from span to register)
+struct load_f_reg_const
+{
+    span_index span_idx_;
+    size_t offset_;
+    reg_index dst_;
+    
+    constexpr static auto args = std::tuple{&load_f_reg_const::span_idx_, &load_f_reg_const::offset_, &load_f_reg_const::dst_};
+};
+
+struct load_f_reg_mut
+{
+    span_index span_idx_;
+    size_t offset_;
+    reg_index dst_;
+    
+    constexpr static auto args = std::tuple{&load_f_reg_mut::span_idx_, &load_f_reg_mut::offset_, &load_f_reg_mut::dst_};
+};
+
+// Element copies — integer (span element to mutable span element)
+struct load_i_mut_const
+{
+    span_index dst_span_idx_;
+    size_t dst_offset_;
+    span_index src_span_idx_;
+    size_t src_offset_;
+    
+    constexpr static auto args = std::tuple{&load_i_mut_const::dst_span_idx_, &load_i_mut_const::dst_offset_, &load_i_mut_const::src_span_idx_, &load_i_mut_const::src_offset_};
+};
+
+struct load_i_mut_mut
+{
+    span_index dst_span_idx_;
+    size_t dst_offset_;
+    span_index src_span_idx_;
+    size_t src_offset_;
+    
+    constexpr static auto args = std::tuple{&load_i_mut_mut::dst_span_idx_, &load_i_mut_mut::dst_offset_, &load_i_mut_mut::src_span_idx_, &load_i_mut_mut::src_offset_};
+};
+
+// Element copies — float (span element to mutable span element)
+struct load_f_mut_const
+{
+    span_index dst_span_idx_;
+    size_t dst_offset_;
+    span_index src_span_idx_;
+    size_t src_offset_;
+    
+    constexpr static auto args = std::tuple{&load_f_mut_const::dst_span_idx_, &load_f_mut_const::dst_offset_, &load_f_mut_const::src_span_idx_, &load_f_mut_const::src_offset_};
+};
+
+struct load_f_mut_mut
+{
+    span_index dst_span_idx_;
+    size_t dst_offset_;
+    span_index src_span_idx_;
+    size_t src_offset_;
+    
+    constexpr static auto args = std::tuple{&load_f_mut_mut::dst_span_idx_, &load_f_mut_mut::dst_offset_, &load_f_mut_mut::src_span_idx_, &load_f_mut_mut::src_offset_};
 };
 
 // Control flow — jumps
@@ -250,19 +330,35 @@ using instruction = std::variant<
     mov_is_reg_const,
     mov_is_reg_mut,
 
-    // Mutable stores — integer elements
-    store_i_const,
-    store_i_reg,
-
     // Span moves — float arrays
     mov_fs_reg_reg,
     mov_fs_reg_const,
     mov_fs_reg_mut,
 
+    // Mutable stores — integer elements
+    store_i_const,
+    store_i_reg,
+    
     // Mutable stores — float elements
     store_f_const,
     store_f_reg,
 
+    // Scalar loads — integer arrays
+    load_i_reg_const,
+    load_i_reg_mut,
+
+    // Scalar loads — float arrays
+    load_f_reg_const,
+    load_f_reg_mut,
+
+    // Element copies — integer
+    load_i_mut_const,
+    load_i_mut_mut,
+
+    // Element copies — float
+    load_f_mut_const,
+    load_f_mut_mut,
+    
     // Control flow — jumps
     jmp,
     jmp_eq_i_reg_reg,

@@ -328,6 +328,62 @@ void translator::emit_store_x_reg(reg_file file, span_index span_idx, size_t off
     std::unreachable();
 }
 
+void translator::emit_load_x_reg_const(reg_file file, span_index span_idx, size_t offset, reg_index dst_reg_idx)
+{
+    switch (file)
+    {
+        case reg_file::i_scalar:
+            program_.instructions_.emplace_back(load_i_reg_const{span_idx, offset, dst_reg_idx});
+            return;
+        case reg_file::f_scalar:
+            program_.instructions_.emplace_back(load_f_reg_const{span_idx, offset, dst_reg_idx});
+            return;
+    }
+    std::unreachable();
+}
+
+void translator::emit_load_x_reg_mut(reg_file file, span_index span_idx, size_t offset, reg_index dst_reg_idx)
+{
+    switch (file)
+    {
+        case reg_file::i_scalar:
+            program_.instructions_.emplace_back(load_i_reg_mut{span_idx, offset, dst_reg_idx});
+            return;
+        case reg_file::f_scalar:
+            program_.instructions_.emplace_back(load_f_reg_mut{span_idx, offset, dst_reg_idx});
+            return;
+    }
+    std::unreachable();
+}
+
+void translator::emit_load_x_mut_const(reg_file file, span_index dst_span_idx, size_t dst_offset, span_index src_span_idx, size_t src_offset)
+{
+    switch (file)
+    {
+        case reg_file::i_scalar:
+            program_.instructions_.emplace_back(load_i_mut_const{dst_span_idx, dst_offset, src_span_idx, src_offset});
+            return;
+        case reg_file::f_scalar:
+            program_.instructions_.emplace_back(load_f_mut_const{dst_span_idx, dst_offset, src_span_idx, src_offset});
+            return;
+    }
+    std::unreachable();
+}
+
+void translator::emit_load_x_mut_mut(reg_file file, span_index dst_span_idx, size_t dst_offset, span_index src_span_idx, size_t src_offset)
+{
+    switch (file)
+    {
+        case reg_file::i_scalar:
+            program_.instructions_.emplace_back(load_i_mut_mut{dst_span_idx, dst_offset, src_span_idx, src_offset});
+            return;
+        case reg_file::f_scalar:
+            program_.instructions_.emplace_back(load_f_mut_mut{dst_span_idx, dst_offset, src_span_idx, src_offset});
+            return;
+    }
+    std::unreachable();
+}
+
 void translator::emit_call_reg(function_index proto_idx, reg_file res_reg_file, reg_index res_reg_idx)
 {
     switch (res_reg_file)
