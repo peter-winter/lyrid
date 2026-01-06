@@ -244,10 +244,11 @@ struct span
 };
 
 using array_spans = std::vector<span>;
-    
+using instructions = std::vector<instruction>;
+
 struct program
 {
-    std::vector<instruction> instructions_;
+    instructions instructions_;
 
     size_t mutable_int_memory_size_ = 0;
     size_t mutable_float_memory_size_ = 0;

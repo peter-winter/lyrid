@@ -109,10 +109,12 @@ void semantic_analyzer::analyze(program& prog)
                           " but provided " + std::to_string(call.args_.size()));
                     return {};
                 }
-
+    
+                bool potentially_flat = true;
                 for (size_t i = 0; i < call.args_.size(); ++i)
                 {
-                    std::optional<type> arg_type = self(self, call.args_[i], current_scope);
+                    auto& arg = call.args_[i];
+                    std::optional<type> arg_type = self(self, arg, current_scope);
                     if (!arg_type)
                     {
                         return {};
@@ -130,7 +132,16 @@ void semantic_analyzer::analyze(program& prog)
                               "' but got '" + type_to_string(*arg_type) + "'");
                         return {};
                     }
+                    
+                    potentially_flat = potentially_flat && std::visit(
+                        overloaded
+                        {
+                            [](const auto&) { return true; },
+                            [](const f_call&) { return false; }
+                        }, arg.wrapped_);
                 }
+                call.is_flat_ = potentially_flat;
+                
                 return wrapper.inferred_type_ = proto.return_type_;
             },
             [this, &wrapper, &current_scope, &self](index_access& acc) -> std::optional<type>

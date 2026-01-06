@@ -46,6 +46,7 @@ struct f_call
 {
     fun_ref fn_;
     std::vector<expr_wrapper> args_;
+    bool is_flat_ = true;
 };
 
 struct index_access

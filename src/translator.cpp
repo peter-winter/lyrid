@@ -217,7 +217,7 @@ void translator::compute_global_max_args()
         for (type at : f.proto_.arg_types_)
         {
             reg_file rf = get_reg_file(at);
-            ++counts[static_cast<size_t>(rf)];
+            ++counts[std::to_underlying(rf)];
         }
         for (size_t i = 0; i < 4; ++i)
             max_per_file[i] = std::max(max_per_file[i], counts[i]);
@@ -364,14 +364,41 @@ void translator::emit_call_mut(function_index proto_idx, reg_file res_reg_file, 
 
 void translator::emit_call_arguments(const ast::f_call& call, const prototype& proto)
 {
-    std::array<size_t, 4> arg_pos{0, 0, 0, 0};
-
-    for (ssize_t a = static_cast<ssize_t>(call.args_.size()) - 1; a >= 0; --a)
+    if (call.is_flat_)
     {
-        type arg_t = proto.arg_types_[a];
-        reg_file arg_reg_file = get_reg_file(arg_t);
-        size_t arg_reg_idx = arg_pos[std::to_underlying(arg_reg_file)]++;
-        emit_assignment(call.args_[a], arg_reg_file, arg_reg_idx);
+        std::array<size_t, 4> arg_pos{0, 0, 0, 0};
+
+        for (size_t a = 0; a < call.args_.size(); ++a)
+        {
+            type arg_t = proto.arg_types_[a];
+            reg_file arg_reg_file = get_reg_file(arg_t);
+            size_t arg_reg_idx = arg_pos[std::to_underlying(arg_reg_file)]++;
+            emit_assignment(call.args_[a], arg_reg_file, arg_reg_idx);
+        }
+    }
+    else
+    {
+        std::vector<std::pair<reg_file, size_t>> temp_regs;
+        temp_regs.reserve(call.args_.size());
+
+        // Evaluate left-to-right into high temporaries
+        for (size_t a = 0; a < call.args_.size(); ++a)
+        {
+            type arg_t = proto.arg_types_[a];
+            reg_file arg_reg_file = get_reg_file(arg_t);
+            size_t temp_idx = next_reg_[std::to_underlying(arg_reg_file)]++;
+            emit_assignment(call.args_[a], arg_reg_file, temp_idx);
+            temp_regs.emplace_back(arg_reg_file, temp_idx);
+        }
+
+        // Move temporaries to low argument positions (in prototype order)
+        std::array<size_t, 4> arg_pos{0, 0, 0, 0};
+        for (size_t a = 0; a < call.args_.size(); ++a)
+        {
+            auto [src_file, src_idx] = temp_regs[a];
+            size_t dst_idx = arg_pos[std::to_underlying(src_file)]++;
+            emit_mov_x_reg_reg(src_file, dst_idx, src_idx);
+        }
     }
 }
 
