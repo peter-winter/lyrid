@@ -5,6 +5,7 @@
 #include <span>
 #include <cstddef>
 #include <utility>
+#include <tuple>
 
 namespace lyrid
 {
@@ -22,12 +23,16 @@ struct mov_i_reg_reg
 {
     reg_index dst_;
     reg_index src_;
+    
+    constexpr static auto args = std::tuple{&mov_i_reg_reg::dst_, &mov_i_reg_reg::src_};
 };
 
 struct mov_i_reg_const
 {
     reg_index dst_;
     const_index src_;
+    
+    constexpr static auto args = std::tuple{&mov_i_reg_const::dst_, &mov_i_reg_const::src_};
 };
 
 // Scalar moves — float
@@ -35,12 +40,16 @@ struct mov_f_reg_reg
 {
     reg_index dst_;
     reg_index src_;
+    
+    constexpr static auto args = std::tuple{&mov_f_reg_reg::dst_, &mov_f_reg_reg::src_};
 };
 
 struct mov_f_reg_const
 {
     reg_index dst_;
     const_index src_;
+    
+    constexpr static auto args = std::tuple{&mov_f_reg_const::dst_, &mov_f_reg_const::src_};
 };
 
 // Span moves — integer arrays
@@ -48,18 +57,24 @@ struct mov_is_reg_reg
 {
     reg_index dst_;
     reg_index src_;
+    
+    constexpr static auto args = std::tuple{&mov_is_reg_reg::dst_, &mov_is_reg_reg::src_};
 };
 
 struct mov_is_reg_const
 {
     reg_index dst_;
     span_index span_idx_;
+    
+    constexpr static auto args = std::tuple{&mov_is_reg_const::dst_, &mov_is_reg_const::span_idx_};
 };
 
 struct mov_is_reg_mut
 {
     reg_index dst_;
     span_index span_idx_;
+    
+    constexpr static auto args = std::tuple{&mov_is_reg_mut::dst_, &mov_is_reg_mut::span_idx_};
 };
 
 // Mutable stores — integer elements (into mutable memory)
@@ -68,6 +83,8 @@ struct mov_i_mut_const
     span_index span_idx_;
     size_t offset_;
     const_index const_src_;
+    
+    constexpr static auto args = std::tuple{&mov_i_mut_const::span_idx_, &mov_i_mut_const::offset_, &mov_i_mut_const::const_src_};
 };
 
 struct mov_i_mut_reg
@@ -75,6 +92,8 @@ struct mov_i_mut_reg
     span_index span_idx_;
     size_t offset_;
     reg_index src_;
+    
+    constexpr static auto args = std::tuple{&mov_i_mut_reg::span_idx_, &mov_i_mut_reg::offset_, &mov_i_mut_reg::src_};
 };
 
 // Span moves — float arrays
@@ -82,18 +101,24 @@ struct mov_fs_reg_reg
 {
     reg_index dst_;
     reg_index src_;
+    
+    constexpr static auto args = std::tuple{&mov_fs_reg_reg::dst_, &mov_fs_reg_reg::src_};
 };
 
 struct mov_fs_reg_const
 {
     reg_index dst_;
     span_index span_idx_;
+    
+    constexpr static auto args = std::tuple{&mov_fs_reg_const::dst_, &mov_fs_reg_const::span_idx_};
 };
 
 struct mov_fs_reg_mut
 {
     reg_index dst_;
     span_index span_idx_;
+    
+    constexpr static auto args = std::tuple{&mov_fs_reg_mut::dst_, &mov_fs_reg_mut::span_idx_};
 };
 
 // Mutable stores — float elements (into mutable memory)
@@ -102,6 +127,8 @@ struct mov_f_mut_const
     span_index span_idx_;
     size_t offset_;
     const_index const_src_;
+    
+    constexpr static auto args = std::tuple{&mov_f_mut_const::span_idx_, &mov_f_mut_const::offset_, &mov_f_mut_const::const_src_};
 };
 
 struct mov_f_mut_reg
@@ -109,12 +136,16 @@ struct mov_f_mut_reg
     span_index span_idx_;
     size_t offset_;
     reg_index src_;
+    
+    constexpr static auto args = std::tuple{&mov_f_mut_reg::span_idx_, &mov_f_mut_reg::offset_, &mov_f_mut_reg::src_};
 };
 
 // Control flow — jumps
 struct jmp
 {
     size_t target_index_;
+    
+    constexpr static auto args = std::tuple{&jmp::target_index_};
 };
 
 struct jmp_eq_i_reg_reg
@@ -122,6 +153,8 @@ struct jmp_eq_i_reg_reg
     reg_index lhs_;
     reg_index rhs_;
     size_t target_index_;
+    
+    constexpr static auto args = std::tuple{&jmp_eq_i_reg_reg::lhs_, &jmp_eq_i_reg_reg::rhs_, &jmp_eq_i_reg_reg::target_index_};
 };
 
 struct jmp_eq_i_reg_const
@@ -129,6 +162,8 @@ struct jmp_eq_i_reg_const
     reg_index lhs_;
     const_index rhs_;
     size_t target_index_;
+    
+    constexpr static auto args = std::tuple{&jmp_eq_i_reg_const::lhs_, &jmp_eq_i_reg_const::rhs_, &jmp_eq_i_reg_const::target_index_};
 };
 
 struct jmp_eq_f_reg_reg
@@ -136,6 +171,8 @@ struct jmp_eq_f_reg_reg
     reg_index lhs_;
     reg_index rhs_;
     size_t target_index_;
+    
+    constexpr static auto args = std::tuple{&jmp_eq_f_reg_reg::lhs_, &jmp_eq_f_reg_reg::rhs_, &jmp_eq_f_reg_reg::target_index_};
 };
 
 struct jmp_eq_f_reg_const
@@ -143,6 +180,8 @@ struct jmp_eq_f_reg_const
     reg_index lhs_;
     const_index rhs_;
     size_t target_index_;
+    
+    constexpr static auto args = std::tuple{&jmp_eq_f_reg_const::lhs_, &jmp_eq_f_reg_const::rhs_, &jmp_eq_f_reg_const::target_index_};
 };
 
 // Function calls — scalar-returning
@@ -150,20 +189,25 @@ struct call_i_reg
 {
     function_index id_;
     reg_index res_;
+    
+    constexpr static auto args = std::tuple{&call_i_reg::id_, &call_i_reg::res_};
 };
 
 struct call_f_reg
 {
     function_index id_;
     reg_index res_;
+    
+    constexpr static auto args = std::tuple{&call_f_reg::id_, &call_f_reg::res_};
 };
 
-// Function calls — scalar-returning, storing in mutable memory
 struct call_i_mut
 {
     function_index id_;
     span_index span_idx_;
     size_t offset_;
+    
+    constexpr static auto args = std::tuple{&call_i_mut::id_, &call_i_mut::span_idx_, &call_i_mut::offset_};
 };
 
 struct call_f_mut
@@ -171,6 +215,8 @@ struct call_f_mut
     function_index id_;
     span_index span_idx_;
     size_t offset_;
+    
+    constexpr static auto args = std::tuple{&call_f_mut::id_, &call_f_mut::span_idx_, &call_f_mut::offset_};
 };
 
 // Function calls — span-returning (array-returning)
@@ -178,14 +224,17 @@ struct call_is_reg
 {
     function_index id_;
     reg_index res_;
+    
+    constexpr static auto args = std::tuple{&call_is_reg::id_, &call_is_reg::res_};
 };
 
 struct call_fs_reg
 {
     function_index id_;
     reg_index res_;
+    
+    constexpr static auto args = std::tuple{&call_fs_reg::id_, &call_fs_reg::res_};
 };
-
 
 using instruction = std::variant<
     // Scalar moves — integer
