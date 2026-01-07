@@ -39,17 +39,6 @@ struct fun_ref
     std::optional<size_t> proto_idx_;
 };
 
-struct scalar_offset
-{
-    size_t value_;
-};
-
-struct span_offset
-{
-    size_t value_;
-};
-
-
 struct expr_wrapper;
 
 struct f_call

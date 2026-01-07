@@ -8,7 +8,6 @@
 
 #include <string>
 #include <vector>
-#include <span>
 #include <utility>
 
 namespace lyrid
