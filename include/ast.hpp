@@ -101,16 +101,12 @@ struct int_scalar
 {
     using value_type = int64_t;
     value_type value_;
-
-    std::optional<size_t> scalar_offset_in_int_memory_;
 };
 
 struct float_scalar
 {
     using value_type = double;
     value_type value_;
-
-    std::optional<size_t> scalar_offset_in_float_memory_;
 };
 
 using expr = std::variant<
