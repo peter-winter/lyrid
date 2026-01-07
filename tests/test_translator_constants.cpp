@@ -1,4 +1,3 @@
-// tests/test_translator_constants.cpp
 #include <catch2/catch_test_macros.hpp>
 
 #include "translator.hpp"

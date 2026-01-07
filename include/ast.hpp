@@ -61,12 +61,24 @@ struct f_call
     std::optional<storage_annotation> result_storage_;
 };
 
+struct direct_storage
+{
+    size_t offset_;
+};
+
+struct indirect_storage
+{
+    size_t offset_;
+};
+
+using index_access_storage = std::variant<direct_storage, indirect_storage>;
+
 struct index_access
 {
     std::unique_ptr<expr_wrapper> base_;
     std::unique_ptr<expr_wrapper> index_;
 
-    std::optional<size_t> scalar_offset_in_memory_;
+    std::optional<index_access_storage> storage_;
 };
 
 struct array_construction

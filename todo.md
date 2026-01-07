@@ -2,7 +2,7 @@
 
 ## Overview
 
-The redesigned translator adopts a fully static, register-free memory model to exploit the language's single-assignment semantics, fixed array lengths (known at translation time), and absence of user-defined control flow. All storage is pre-allocated in two contiguous pools, enabling predictable offsets and minimal runtime overhead. Execution consists of a linear sequence of memory moves and external function calls, with results written directly to pre-allocated locations.
+The redesigned translator adopts a fully static, register-free memory model to exploit the language's single-assignment semantics, fixed array lengths (known at translation time), and absence of user-defined control flow. All storage is pre-allocated in two contiguous pools, enabling predictable offsets and minimal runtime overhead. Execution consists of a linear sequence of scalar moves, indirect scalar loads, and external function calls, with results written directly to pre-allocated locations.
 
 The translation process comprises two primary phases:
 - Memory Layout Phase: Compute fixed offsets for all values and annotate the AST accordingly.
@@ -15,11 +15,11 @@ Two separate, contiguous buffers form the program's memory image:
 - int_memory: A vector of int64_t containing all integer scalars, all integer array elements, and all span metadata (pairs of int64_t: data offset into the target pool + fixed length), regardless of whether the span describes an integer or float array.
 - float_memory: A vector of double containing all float scalars and all float array elements.
 
-No padding or alignment is required. Pools are sized exactly to fit allocated data, with literals hoisted directly and unknown slots (awaiting function results) initialized with sentinels for debugging.
+No padding or alignment is required. Pools are sized exactly to fit allocated data, with literals hoisted directly and unknown slots (awaiting function results or indirect loads) initialized with sentinels for debugging.
 
-Spans are uniformly represented as two consecutive int64_t values in int_memory. The pool for data interpretation is derived from the expression's inferred_type_.
+Spans are uniformly represented as two consecutive int64_t values in int_memory. Span metadata (data offset and length) is fully resolved and hoisted during the layout phase and remains immutable at runtime. External functions write only to pre-allocated data buffers.
 
-Span metadata (data offset and length) is fully resolved and hoisted during the layout phase and remains immutable at runtime. External functions that return arrays write only to the pre-allocated data buffer; they do not modify span metadata.
+The pool for data interpretation is derived from the expression's inferred_type_.
 
 ## Storage Representation
 
@@ -29,90 +29,59 @@ Span metadata (data offset and length) is fully resolved and hoisted during the 
   - Literals: Direct scalar offset in pool-specific field.
   - Array constructions/comprehensions: span_offset_in_int_memory_.
   - Function calls: result_storage_ (scalar_offset or span_offset wrapper).
-  - Index access: scalar_offset_in_memory_ (static case) or handled via indirect instruction (dynamic case).
-  - Declarations and references: Derived from initializer annotations.
+  - Index access: storage_ (direct_storage or indirect_storage with offset).
+  - Declarations and references: Derived from initializer annotations via recursive resolution.
 
-Array references (including copies such as `b = a`) are handled by propagating the same span offset during layout; no runtime duplication of metadata occurs.
+Array references are handled by propagating the same span offset during layout; no runtime duplication occurs.
 
 ## Memory Layout Phase
 
-Performed via recursive traversal of the AST (post-order to ensure subexpressions are allocated first):
+The layout phase is implemented as a single function `layout_exprs(ast::program& prog_ast)` containing recursive lambdas for mutual recursion between layout and resolution.
 
-1. Allocate Scalars:
-   - For literal scalars: Append to the appropriate pool and record offset in the node.
-   - For function call results (scalar return): Reserve a slot in the derived pool and record offset.
+- Full traversal allocates result slots for all value-producing subexpressions.
+- Literals are hoisted directly (standalone or into array buffer positions).
+- Function calls allocate return slots (scalar or array buffer + immutable span) after laying out arguments.
+- Array constructions allocate buffer + immutable span, hoisting literal elements directly and allocating separate result slots for non-literals.
+- Index access allocates base and index, resolves span, and annotates storage_ (direct elem_off for static literal index; indirect temp slot for dynamic).
+- Symbol references are resolved recursively via declaration lookup.
+- Sentinels mark runtime-filled slots.
 
-2. Allocate Arrays:
-   - Compute fixed length (from type or deduction).
-   - Reserve contiguous data buffer in the target pool.
-   - Reserve span pair in int_memory: first slot for data offset (set to buffer start), second for length (hoisted from type).
-   - Record span_offset_in_int_memory_ in the producing node.
-   - For constructions with known elements: Hoist literals directly into buffer positions.
-   - For partial unknowns: Initialize known positions; sentinel-fill others.
+The phase produces a complete, fixed-size memory image with all offsets resolved and annotations set.
 
-3. Resolve Static Indexing:
-   - If base span and index literal are resolved: Compute direct element offset and annotate scalar_offset_in_memory_.
+## Instruction Production Phase (Approach)
 
-4. Sharing:
-   - Array reference copies and uses propagate the same span offset (no new allocation).
+The instruction production phase will mirror the layout phase structure, using similar recursive lambdas to traverse the AST post-layout.
 
-The phase produces a complete, fixed-size memory image with all offsets and immutable span metadata resolved.
+1. Traverse declarations and expressions in post-order.
+2. For each value-producing node:
+   - If result is hoisted literal: No instruction.
+   - If non-hoisted placement needed (e.g., non-literal array element): Emit move_scalar from subexpression result to buffer position.
+   - For function calls: Emit call with:
+     - Input args_ referencing argument result offsets/scalars/spans.
+     - Mandatory return_ referencing pre-allocated result storage.
+   - For dynamic index access: Emit move_scalar_indirect using base span offset, index result offset, element pool, and temp dst offset.
+   - Static index access: Direct reference (no instruction).
 
-## Instruction Production Phase
-
-Instructions are emitted in post-order (innermost expressions first) to ensure results are available before use:
-
-1. Literals and Fully Static Expressions:
-   - No instructions emitted (values hoisted during layout).
-
-2. Copies/Moves:
-   - Emit move_scalar for scalar copies to new slots (when not fully shared).
-
-3. Function Calls:
-   - Prepare arguments: Reference allocated offsets/scalars/spans directly.
-   - Emit call with input args_ (derived from subexpression annotations) and mandatory return_ pointing to pre-allocated result storage.
-   - Nested calls: Inner results referenced directly as arguments (no intermediate moves).
-   - Array-returning calls: External function fills only the pre-allocated data buffer; span metadata is already complete.
-
-4. Array Initialization with Runtime Elements:
-   - Emit move_scalar to place call results into buffer positions (if not direct).
-
-5. Indexing:
-   - Static cases: Treated as direct offset reference (no instruction).
-   - Dynamic cases: Emit move_scalar_indirect.
-
-The resulting program contains only necessary moves and calls, executed sequentially by the virtual machine.
+The resulting program will contain only necessary scalar moves, indirect loads, and calls, executed sequentially by the virtual machine.
 
 ## Handling Specific Constructs
 
-- Nested Calls: Each call receives a pre-allocated result slot. Inner results are passed by direct offset reference to outer calls.
-- Mixed Known/Unknown Arrays: Known elements hoisted; runtime results placed via moves into reserved positions.
-- Comprehensions: Treated as array constructions with computed length (longest source); elements filled via generated moves/calls (future implementation).
+- Nested Calls: Arguments laid out first; results referenced directly in outer call.
+- Mixed Known/Unknown Arrays: Literals hoisted; runtime results moved into buffer.
+- Comprehensions: Future implementation (treated as array constructions).
 - Index Access:
-  - Static Case (index is literal or fully resolvable): Resolved during layout to a direct scalar offset (scalar_offset_in_memory_); no runtime instruction needed.
-  - Dynamic Case (index from runtime value, e.g., call result): Base span is always static (pre-allocated data offset + length). Emit a move_scalar_indirect instruction:
-    struct move_scalar_indirect
-    {
-        pool pool_;                          // Target data pool (int_pool or float_pool)
-        size_t span_offset_in_int_memory_;   // Offset to span pair (data_offset + length)
-        size_t index_offset_in_int_memory_;  // Offset to runtime index scalar (int64_t)
-        size_t dst_offset_;                  // Destination scalar offset in the specified pool
-    };
-    - Runtime behavior: Load data offset from span, load index value, compute address (data_offset + index), copy element to dst_offset.
-    - Pool is encoded statically during emission for assembly self-sufficiency.
-    - Bounds checking optional (using loaded length).
-    - The instruction is fully self-contained; the virtual machine requires no AST or type information to execute it correctly.
-- Array Producers and Consumers:
-  - Array-returning function calls are array producers: a dedicated buffer and span pair are pre-allocated for each such call.
-  - The span metadata (data offset and length) is fully hoisted and immutable.
-  - The external function writes only element values into the buffer.
-  - All consumers (declarations, outer call arguments, index bases, comprehension sources) reference the same pre-allocated span offset directly via static propagation.
-  - No runtime span metadata copying occurs.
+  - Static (literal index chain): Direct element offset.
+  - Dynamic: Indirect load to temp slot (optional move to final position).
+- Array Producers: Calls returning arrays allocate dedicated buffer + immutable span; function fills buffer only.
+- Consumers: Reference same span offset directly.
 
-## Planned Optimizations
+## Planned Future Work
 
-- Dead move elimination: Remove redundant scalar copies (e.g., fully static initializers).
-- Direct placement: Inline call results into array buffers where possible.
-- Sharing propagation: Maximize reference reuse for scalars and arrays.
+- Implement instruction emission phase with recursive traversal.
+- Add dead move elimination and direct placement optimizations.
+- Support comprehensions (generate moves/calls for element computation).
+- Implement virtual machine to execute the generated program.
+- Add optional runtime bounds checking for indirect loads.
+- Extend to support mutable stores if language evolves.
 
-This design ensures deterministic, efficient code generation while supporting the language's constraints, including controlled dynamic indexing via a single indirect move instruction. Implementation will proceed incrementally, beginning with layout for literals and simple declarations.
+This design ensures deterministic, efficient code generation while supporting the language's constraints. Implementation is proceeding incrementally, with memory layout complete and instruction phase next.

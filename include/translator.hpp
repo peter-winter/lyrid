@@ -38,8 +38,6 @@ public:
     assembly::program& get_program() { return program_; }
     
 private:
-    constexpr static size_t should_be_more_than_enough_memory = (1 << 13); // 8KB
-    
     struct function
     {
         std::string name_;
@@ -51,6 +49,14 @@ private:
     
     void translation_error(const ast::source_location& loc, const std::string& message);
     bool expect(bool condition, const ast::source_location& loc, const std::string& message);
+
+    void layout_exprs(ast::program& prog_ast);
+    
+    size_t get_memory_size(assembly::pool p) const;
+    void push_sentinel(assembly::pool p);
+    void push_sentinels(assembly::pool p, size_t count);
+
+    std::optional<size_t> get_span_offset(ast::storage_annotation annot) const;
 
     std::vector<std::string> errors_;
     std::vector<function> functions_;
