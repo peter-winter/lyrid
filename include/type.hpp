@@ -83,5 +83,17 @@ inline type get_element_type(array_type ar)
     return type(std::visit([](auto x){ return type(x); }, ar.sc_));
 }
 
+inline scalar_type get_scalar_type(type t)
+{
+    return std::visit(
+        overloaded
+        {
+            [](int_scalar_type i) { return scalar_type(i); },
+            [](float_scalar_type f) { return scalar_type(f); },
+            [](array_type x) { return x.sc_; }
+        },
+        t
+    );
+}
 
 }
