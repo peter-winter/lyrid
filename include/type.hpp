@@ -1,6 +1,7 @@
 #pragma once
 
 #include <variant>
+#include <cstdint>
 
 #include "utility.hpp"
 
@@ -8,10 +9,14 @@ namespace lyrid
 {
     
 struct int_scalar_type
-{};
+{
+    using value_type = int64_t;
+};
 
 struct float_scalar_type
-{};
+{
+    using value_type = double;
+};
 
 inline bool operator == (int_scalar_type, int_scalar_type) { return true; }
 inline bool operator == (float_scalar_type, float_scalar_type) { return true; }

@@ -67,13 +67,13 @@ struct comprehension
 
 struct int_scalar
 {
-    using value_type = int64_t;
+    using value_type = int_scalar_type::value_type;
     value_type value_;
 };
 
 struct float_scalar
 {
-    using value_type = double;
+    using value_type = float_scalar_type::value_type;
     value_type value_;
 };
 
