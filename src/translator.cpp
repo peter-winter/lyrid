@@ -120,11 +120,11 @@ void translator::create_array_element_fill_instruction(const ast::expr_wrapper& 
     {
         [&](const int_scalar& lit)
         {
-            vm_.add_instruction(place_const_int{target_block_id, offset, lit.value_});
+            vm_.add_instruction(place_const{target_block_id, offset, lit.value_});
         },
         [&](const float_scalar& lit) 
         {
-            vm_.add_instruction(place_const_float{target_block_id, offset, lit.value_});
+            vm_.add_instruction(place_const{target_block_id, offset, lit.value_});
         },
         [&](const symbol_ref& sr)
         {                
@@ -132,15 +132,7 @@ void translator::create_array_element_fill_instruction(const ast::expr_wrapper& 
                 return;
                 
             size_t source_block_id = assignments_block_ids_[*sr.declaration_idx_];
-            
-            std::visit(
-                overloaded
-                {
-                    [&](int_scalar_type i) { vm_.add_instruction(copy_element_int{source_block_id, 0, target_block_id, offset}); },
-                    [&](float_scalar_type f) { vm_.add_instruction(copy_element_float{source_block_id, 0, target_block_id, offset}); }
-                },
-                get_scalar_type(t)
-            );
+            vm_.add_instruction(copy_element{get_pool(t), source_block_id, 0, target_block_id, offset});
         },
         [&](const f_call& fc)
         {
@@ -168,8 +160,10 @@ void translator::create_call_instructions(const f_call& fc, source_location loc,
             
         type arg_type = *a.inferred_type_;
         size_t len = get_length(arg_type).value();
-        size_t arg_block_id = vm_.allocate_block(get_pool(arg_type), len);
+        pool_tag p = get_pool(arg_type);
+        size_t arg_block_id = vm_.allocate_block(p, len);
         create_assignment_instructions(a, arg_block_id, len);
+        args.push_back(call_arg{p, arg_block_id});
     }
     
     vm_.add_instruction(call_func{fc.fn_.proto_idx_.value(), args, call_arg{get_pool(t), target_block_id}});
@@ -186,18 +180,18 @@ void translator::create_assignment_instructions(const ast::expr_wrapper& ew, siz
     {
         [&](const int_scalar& lit)
         {
-            return vm_.add_instruction(place_const_int{target_block_id, 0, lit.value_});
+            return vm_.add_instruction(place_const{target_block_id, 0, lit.value_});
         },
         [&](const float_scalar& lit)
         {
-            return vm_.add_instruction(place_const_float{target_block_id, 0, lit.value_});
+            return vm_.add_instruction(place_const{target_block_id, 0, lit.value_});
         },
         [&](const symbol_ref& sr)
         {                
             if (!expect_valid_symbol_ref(sr, ew.loc_))
                 return;
                 
-            vm_.add_instruction(copy_block{assignments_block_ids_[*sr.declaration_idx_], target_block_id});
+            vm_.add_instruction(copy_block{get_pool(t), assignments_block_ids_[*sr.declaration_idx_], target_block_id});
         },
         [&](const f_call& fc)
         {

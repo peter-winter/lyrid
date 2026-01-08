@@ -23,36 +23,25 @@ using pool_tag = std::variant<int_pool, float_pool>;
 struct noop
 {};
 
-struct place_const_int
-{
-    size_t block_id_;
-    size_t offset_;
-    int64_t value_;
-};
+using const_value = std::variant<int_scalar_type::value_type, float_scalar_type::value_type>;
 
-struct place_const_float
+struct place_const
 {
     size_t block_id_;
     size_t offset_;
-    double value_;
+    const_value value_;
 };
 
 struct copy_block
 {
+    pool_tag pool_;
     size_t src_block_id_;
     size_t target_block_id_;
 };
 
-struct copy_element_int
+struct copy_element
 {
-    size_t src_block_id_;
-    size_t src_offset_;
-    size_t target_block_id_;
-    size_t target_offset_;
-};
-
-struct copy_element_float
-{
+    pool_tag pool_;
     size_t src_block_id_;
     size_t src_offset_;
     size_t target_block_id_;
@@ -74,16 +63,14 @@ struct call_func
 
 using instruction = std::variant<
     noop,
-    place_const_int,
-    place_const_float,
+    place_const,
     copy_block,
-    copy_element_int,
-    copy_element_float,
+    copy_element,
     call_func
 >;
 
-constexpr int64_t int_sentinel = 0xDEADBEEFDEADBEEFULL;
-constexpr double float_sentinel = std::numeric_limits<double>::quiet_NaN();
+constexpr int_scalar_type::value_type int_sentinel = 0xDEADBEEFDEADBEEFULL;
+constexpr float_scalar_type::value_type float_sentinel = std::numeric_limits<float_scalar_type::value_type>::quiet_NaN();
 
 struct block_meta
 {
