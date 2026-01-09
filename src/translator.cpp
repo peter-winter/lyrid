@@ -92,6 +92,16 @@ std::optional<size_t> translator::get_length(type t)
     );
 }
 
+data translator::get_arg_data(type t, size_t arg_block_id)
+{
+    return std::visit(overloaded
+    {
+        [&](int_scalar_type) -> data { return element_data{ arg_block_id, 0}; },
+        [&](float_scalar_type) -> data { return element_data{ arg_block_id, 0}; },
+        [&](array_type) -> data { return block_data{ arg_block_id }; }
+    }, t);
+}
+
 bool translator::expect_valid_symbol_ref(const symbol_ref& sr, ast::source_location loc)
 {
     return expect(sr.declaration_idx_.has_value(), loc, "Unresolved symbol") &&
@@ -109,6 +119,15 @@ bool translator::expect_valid_fcall(const f_call& fc, ast::source_location loc)
     return expect(fc.fn_.proto_idx_.has_value(), loc, "Unresolved function");
 }
 
+void translator::create_array_element_fill_instructions(const array_construction& ac, size_t target_block_id)
+{
+    for (size_t i = 0; i < ac.elements_.size(); ++i)
+    {
+        const auto& el = ac.elements_[i];
+        create_array_element_fill_instruction(el, target_block_id, i);
+    }
+}
+
 void translator::create_array_element_fill_instruction(const ast::expr_wrapper& ew, size_t target_block_id, size_t offset)
 {
     if (!expect_valid_type(ew.inferred_type_, ew.loc_))
@@ -116,37 +135,40 @@ void translator::create_array_element_fill_instruction(const ast::expr_wrapper& 
         
     type t = *ew.inferred_type_;
     
-    return std::visit(overloaded
-    {
-        [&](const int_scalar& lit)
+    return std::visit(
+        overloaded
         {
-            vm_.add_instruction(place_const{target_block_id, offset, lit.value_});
-        },
-        [&](const float_scalar& lit) 
-        {
-            vm_.add_instruction(place_const{target_block_id, offset, lit.value_});
-        },
-        [&](const symbol_ref& sr)
-        {                
-            if (!expect_valid_symbol_ref(sr, ew.loc_))
-                return;
-                
-            size_t source_block_id = assignments_block_ids_[*sr.declaration_idx_];
-            vm_.add_instruction(copy_element{get_pool(t), source_block_id, 0, target_block_id, offset});
-        },
-        [&](const f_call& fc)
-        {
-            create_call_instructions(fc, ew.loc_, t, target_block_id);
-        },
-        [&](const index_access&)
-        {
-            translation_error(ew.loc_, "Indexing not yet supported in code generation");
-        },
-        [&](const auto&){}
-    }, ew.wrapped_);
+            [&](const int_scalar& lit)
+            {
+                vm_.add_instruction(place_const{target_block_id, offset, lit.value_});
+            },
+            [&](const float_scalar& lit) 
+            {
+                vm_.add_instruction(place_const{target_block_id, offset, lit.value_});
+            },
+            [&](const symbol_ref& sr)
+            {                
+                if (!expect_valid_symbol_ref(sr, ew.loc_))
+                    return;
+                    
+                size_t source_block_id = assignments_block_ids_[*sr.declaration_idx_];
+                vm_.add_instruction(copy_element{get_pool(t), source_block_id, 0, target_block_id, offset});
+            },
+            [&](const f_call& fc)
+            {
+                create_call_instruction(fc, ew.loc_, t, element_data{ target_block_id, offset });
+            },
+            [&](const index_access&)
+            {
+                translation_error(ew.loc_, "Indexing not yet supported in code generation");
+            },
+            [&](const auto&){}
+        }, 
+        ew.wrapped_
+    );
 }
 
-void translator::create_call_instructions(const f_call& fc, source_location loc, type t, size_t target_block_id)
+void translator::create_call_instruction(const f_call& fc, source_location loc, type t, data target)
 {
     if (!expect_valid_fcall(fc, loc))
         return;
@@ -159,61 +181,138 @@ void translator::create_call_instructions(const f_call& fc, source_location loc,
             return;
             
         type arg_type = *a.inferred_type_;
-        size_t len = get_length(arg_type).value();
-        pool_tag p = get_pool(arg_type);
-        size_t arg_block_id = vm_.allocate_block(p, len);
-        create_assignment_instructions(a, arg_block_id, len);
-        args.push_back(call_arg{p, arg_block_id});
+        pool_tag arg_pool = get_pool(arg_type);
+                
+        std::optional<data> arg_data = std::visit(
+            overloaded
+            {
+                [&](const int_scalar& lit) -> std::optional<data>
+                {
+                    return const_value{ lit.value_ };
+                },
+                [&](const float_scalar& lit) -> std::optional<data>
+                {
+                    return const_value{ lit.value_ };
+                },
+                [&](const symbol_ref& sr) -> std::optional<data>
+                {                
+                    if (!expect_valid_symbol_ref(sr, loc))
+                        return {};
+                    
+                    size_t arg_block_id = assignments_block_ids_[*sr.declaration_idx_];
+                    return get_arg_data(arg_type, arg_block_id);
+                },
+                [&](const f_call& fc) -> std::optional<data>
+                {
+                    size_t arg_block_id = vm_.allocate_block(arg_pool, get_length(arg_type).value());
+                    data inner_call_data = get_arg_data(arg_type, arg_block_id);
+                    create_call_instruction(fc, no_location, arg_type, inner_call_data);
+                    return inner_call_data;
+                },
+                [&](const index_access&) -> std::optional<data>
+                {
+                    translation_error(a.loc_, "Indexing not yet supported in code generation");
+                    return {};
+                },
+                [&](const array_construction& ac) -> std::optional<data>
+                {
+                    size_t temp_arr_block_id = vm_.allocate_block(arg_pool, get_length(arg_type).value());
+                    create_array_element_fill_instructions(ac, temp_arr_block_id);
+                    return block_data{ temp_arr_block_id };
+                },
+                [&](const comprehension&) -> std::optional<data>
+                {
+                    translation_error(a.loc_, "Array comprehensions not yet supported in code generation");
+                    return {};
+                }
+            }, a.wrapped_
+        );
+        
+        if (!expect(arg_data.has_value(), a.loc_, "Some call arguments not supported in code generation"))
+            return;
+            
+        args.push_back(call_arg{arg_pool, arg_data.value()});
     }
     
-    vm_.add_instruction(call_func{fc.fn_.proto_idx_.value(), args, call_arg{get_pool(t), target_block_id}});
+    vm_.add_instruction(call_func{fc.fn_.proto_idx_.value(), args, call_arg{get_pool(t), target}});
 }
 
-void translator::create_assignment_instructions(const ast::expr_wrapper& ew, size_t target_block_id, size_t target_block_len)
+void translator::create_top_assignment_instruction(const ast::expr_wrapper& ew)
 {
     if (!expect_valid_type(ew.inferred_type_, ew.loc_))
         return;
         
     type t = *ew.inferred_type_;
-        
-    std::visit(overloaded
-    {
-        [&](const int_scalar& lit)
+    
+    std::optional<size_t> target_block_id = std::visit(
+        overloaded
         {
-            return vm_.add_instruction(place_const{target_block_id, 0, lit.value_});
-        },
-        [&](const float_scalar& lit)
-        {
-            return vm_.add_instruction(place_const{target_block_id, 0, lit.value_});
-        },
-        [&](const symbol_ref& sr)
-        {                
-            if (!expect_valid_symbol_ref(sr, ew.loc_))
-                return;
-                
-            vm_.add_instruction(copy_block{get_pool(t), assignments_block_ids_[*sr.declaration_idx_], target_block_id});
-        },
-        [&](const f_call& fc)
-        {
-            create_call_instructions(fc, ew.loc_, t, target_block_id);
-        },
-        [&](const index_access&)
-        {
-            translation_error(ew.loc_, "Indexing not yet supported in code generation");
-        },
-        [&](const array_construction& ac)
-        {
-            for (size_t i = 0; i < ac.elements_.size(); ++i)
+            [&](const auto&) -> std::optional<size_t>
             {
-                const auto& el = ac.elements_[i];
-                create_array_element_fill_instruction(el, target_block_id, i);
+                size_t len = get_length(t).value();
+                return vm_.allocate_block(get_pool(t), len);
+            },
+            [&](const symbol_ref& sr) -> std::optional<size_t>
+            {                
+                if (!expect_valid_symbol_ref(sr, ew.loc_))
+                    return {};
+                    
+                return assignments_block_ids_[*sr.declaration_idx_];
+            },
+            [&](const index_access&) -> std::optional<size_t>
+            {
+                translation_error(ew.loc_, "Indexing not yet supported in code generation");
+                return {};
+            },
+            [&](const comprehension&) -> std::optional<size_t>
+            {
+                translation_error(ew.loc_, "Array comprehensions not yet supported in code generation");
+                return {};
             }
-        },
-        [&](const comprehension&)
+        }, 
+        ew.wrapped_
+    );
+    
+    if (!expect(target_block_id.has_value(), ew.loc_, "Could not resolve target block for assignment"))
+        return;
+        
+    assignments_block_ids_.push_back(*target_block_id);
+    
+    std::visit(
+        overloaded
         {
-            translation_error(ew.loc_, "Array comprehensions not yet supported in code generation");
-        }
-    }, ew.wrapped_);
+            [&](const int_scalar& lit)
+            {
+                return vm_.add_instruction(place_const{*target_block_id, 0, lit.value_});
+            },
+            [&](const float_scalar& lit)
+            {
+                return vm_.add_instruction(place_const{*target_block_id, 0, lit.value_});
+            },
+            [&](const symbol_ref& sr)
+            {                
+                // noop
+            },
+            [&](const f_call& fc)
+            {
+                data target = get_arg_data(t, *target_block_id);
+                create_call_instruction(fc, ew.loc_, t, target);
+            },
+            [&](const index_access&)
+            {
+                translation_error(ew.loc_, "Indexing not yet supported in code generation");
+            },
+            [&](const array_construction& ac)
+            {
+                create_array_element_fill_instructions(ac, *target_block_id);
+            },
+            [&](const comprehension&)
+            {
+                translation_error(ew.loc_, "Array comprehensions not yet supported in code generation");
+            }
+        }, 
+        ew.wrapped_
+    );
 }
 
 void translator::create_vm(const ast::program& prog_ast)
@@ -223,11 +322,7 @@ void translator::create_vm(const ast::program& prog_ast)
         if (!expect_valid_type(decl.type_, decl.loc_))
             break;
             
-        size_t len = get_length(decl.type_).value();
-        size_t block_id = vm_.allocate_block(get_pool(decl.type_), len);
-        create_assignment_instructions(decl.value_, block_id, len);
-        
-        assignments_block_ids_.push_back(block_id);
+        create_top_assignment_instruction(decl.value_);
     }
 }
 

@@ -21,6 +21,8 @@ struct source_location
     size_t column_;
 };
 
+constexpr source_location no_location{0, 0};
+
 struct identifier
 {
     std::string value_;

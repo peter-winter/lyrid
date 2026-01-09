@@ -42,12 +42,14 @@ private:
     bool expect(bool condition, const ast::source_location& loc, const std::string& message);
     pool_tag get_pool(type t);
     std::optional<size_t> get_length(type t);
+    data get_arg_data(type t, size_t arg_block_id);
 
     void create_vm(const ast::program& prog_ast);
-    void create_assignment_instructions(const ast::expr_wrapper& ew, size_t target_block_id, size_t target_block_len);
-        
+    
+    void create_top_assignment_instruction(const ast::expr_wrapper& ew);
+    void create_array_element_fill_instructions(const ast::array_construction& ac, size_t target_block_id);
     void create_array_element_fill_instruction(const ast::expr_wrapper& ew, size_t target_block_id, size_t offset);
-    void create_call_instructions(const ast::f_call& fc, ast::source_location loc, type t, size_t target_block_id);
+    void create_call_instruction(const ast::f_call& fc, ast::source_location loc, type t, data target);
     
     bool expect_valid_symbol_ref(const ast::symbol_ref& sr, ast::source_location loc);
     bool expect_valid_type(std::optional<type> t, ast::source_location loc);

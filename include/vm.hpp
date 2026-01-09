@@ -20,9 +20,6 @@ struct float_pool
 
 using pool_tag = std::variant<int_pool, float_pool>;
 
-struct noop
-{};
-
 using const_value = std::variant<int_scalar_type::value_type, float_scalar_type::value_type>;
 
 struct place_const
@@ -48,10 +45,24 @@ struct copy_element
     size_t target_offset_;
 };
 
+struct element_data
+{
+    size_t block_id_;
+    size_t offset_;
+};
+
+struct block_data
+{
+    size_t block_id_;
+    size_t offset_;
+};
+
+using data = std::variant<const_value, element_data, block_data>;
+
 struct call_arg
 {
     pool_tag pool_;
-    size_t block_id_;
+    data source_;
 };
 
 struct call_func
@@ -62,7 +73,6 @@ struct call_func
 };
 
 using instruction = std::variant<
-    noop,
     place_const,
     copy_block,
     copy_element,
