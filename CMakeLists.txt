@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.15)
 project(lyrid LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -7,49 +7,29 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
 
 FetchContent_Declare(
-    Catch2
-    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG v3.6.0
+    miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG        0.11.23
+    GIT_SHALLOW    TRUE
 )
 
-FetchContent_MakeAvailable(Catch2)
+set(MINIAUDIO_NO_LIBVORBIS ON CACHE BOOL "" FORCE)
+set(MINIAUDIO_NO_LIBOPUS   ON CACHE BOOL "" FORCE)
+set(MINIAUDIO_NO_WAV       ON CACHE BOOL "" FORCE)
+set(MINIAUDIO_NO_FLAC      ON CACHE BOOL "" FORCE)
+set(MINIAUDIO_NO_MP3       ON CACHE BOOL "" FORCE)   
+set(MINIAUDIO_NO_EXTRA_NODES ON CACHE BOOL "" FORCE)
+set(MINIAUDIO_NO_LIBVORBIS  ON CACHE BOOL "" FORCE)
+set(MINIAUDIO_NO_LIBOPUS    ON CACHE BOOL "" FORCE)
 
-# Enable CTest integration
-enable_testing()
+FetchContent_MakeAvailable(miniaudio)
 
-# Add the Catch2 extras directory to the module path for test discovery
-list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
-
-# Include the Catch2 CMake module
-include(Catch)
-
-add_library(lyrid_parser STATIC
-    src/parser.cpp
-    src/semantic_analyzer.cpp
-    src/translator.cpp
+add_executable(lyrid 
+    src/main.cpp
+    src/device.cpp
 )
 
-target_include_directories(lyrid_parser
-    PUBLIC include
-)
+target_include_directories(lyrid PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(lyrid PRIVATE miniaudio)   
 
-add_executable(lyrid_parser_tests
-    tests/test_parser_valid.cpp
-    tests/test_parser_invalid.cpp
-    tests/test_semantics_valid.cpp
-    tests/test_semantics_invalid.cpp
-    tests/test_utility.cpp
-)
 
-target_include_directories(lyrid_parser_tests
-    PRIVATE include
-)
-
-target_link_libraries(lyrid_parser_tests
-    PRIVATE
-        lyrid_parser
-        Catch2::Catch2WithMain
-)
-
-# Automatically discover and register Catch2 tests with CTest
-catch_discover_tests(lyrid_parser_tests)
